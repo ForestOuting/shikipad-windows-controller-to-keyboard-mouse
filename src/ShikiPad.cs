@@ -901,16 +901,12 @@ internal sealed class MapperForm : Form {
     protected override void OnLoad(EventArgs e) {
         base.OnLoad(e);
                         _hid.Start();
-        Console.WriteLine("CurrentProcessPath = " + Process.GetCurrentProcess().MainModule.FileName);
-        Console.WriteLine("ProcessId = " + Process.GetCurrentProcess().Id);
         int parentId = 0;
         try {
             var pc = new System.Diagnostics.PerformanceCounter("Process", "Creating Process ID", Process.GetCurrentProcess().ProcessName);
             parentId = (int)pc.NextValue();
         } catch { }
-        Console.WriteLine("ParentProcess = " + parentId);
-        Console.WriteLine("ControllerBackend = rawinput");
-        Console.WriteLine("ReadsControllerInThisProcess = true");
+        Program.PrintRuntimeStatus(Process.GetCurrentProcess().MainModule.FileName, Process.GetCurrentProcess().Id, parentId, "rawinput", true);
         
         _timer.Start();
         _lastTickMs = NowMs();
@@ -1431,6 +1427,70 @@ internal static class Program {
     public static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
 
     public static void PrintGradientBanner() {
+        EnableAnsi();
+
+        int width = GetConsoleWidth();
+        int panelWidth = Math.Min(104, Math.Max(66, width - 6));
+
+        string[] logo = new string[] {
+            @"     _____ _     _ _    _ _____          _     ",
+            @"    / ____| |   (_) |  (_)  __ \        | |    ",
+            @"   | (___ | |__  _| | ___| |__) |_ _  __| |    ",
+            @"    \___ \| '_ \| | |/ / |  ___/ _` |/ _` |    ",
+            @"    ____) | | | | |   <| | |  | (_| | (_| |    ",
+            @"   |_____/|_| |_|_|_|\_\_|_|   \__,_|\__,_|    "
+        };
+        Rgb[] logoStops = new Rgb[] {
+            new Rgb(91, 246, 255), new Rgb(83, 183, 255), new Rgb(174, 120, 255),
+            new Rgb(255, 109, 191), new Rgb(255, 169, 85), new Rgb(255, 224, 112),
+            new Rgb(113, 255, 194), new Rgb(255, 255, 255)
+        };
+
+        Console.WriteLine();
+        WriteNeonRule(width, panelWidth, "SHIKIPAD BOOT SEQUENCE");
+        WriteSeasonRail(width, panelWidth);
+        WriteAtmosphereLine(width, panelWidth, 0);
+        WriteMutedCentered(width, "CONTROL SURFACE READY");
+        WriteLogoHalo(width, panelWidth, true);
+        for (int i = 0; i < logo.Length; i++) {
+            WriteGradientCentered(width, logo[i], logoStops);
+        }
+        WriteLogoHalo(width, panelWidth, false);
+        WritePixelSubline(width, panelWidth);
+        WriteAtmosphereLine(width, panelWidth, 1);
+        WriteStatusCard(width, panelWidth);
+        WriteSeasonDivider(width, panelWidth);
+        Console.WriteLine("\x1b[0m");
+    }
+
+    public static void PrintRunHint() {
+        EnableAnsi();
+        int width = GetConsoleWidth();
+        int panelWidth = Math.Min(104, Math.Max(66, width - 6));
+        WriteLiveStatusBar(width, panelWidth);
+        Console.WriteLine("\x1b[0m");
+    }
+
+    public static void PrintRuntimeStatus(string processPath, int processId, int parentId, string backend, bool readsController) {
+        EnableAnsi();
+        int width = GetConsoleWidth();
+        int panelWidth = Math.Min(104, Math.Max(66, width - 6));
+        string fileName = Path.GetFileName(processPath);
+
+        Console.WriteLine();
+        WritePanelBorder(width, panelWidth, true, new Rgb(139, 160, 172));
+        WritePanelTitle(width, panelWidth, "RUNTIME STATUS", new Rgb(233, 244, 248));
+        WritePanelSeparator(width, panelWidth, new Rgb(73, 90, 101));
+        WritePanelLine(width, panelWidth, "  Process", fileName + "  PID " + processId.ToString(CultureInfo.InvariantCulture), new Rgb(255, 199, 95), new Rgb(222, 238, 244));
+        WritePanelLine(width, panelWidth, "  Parent", parentId.ToString(CultureInfo.InvariantCulture), new Rgb(191, 132, 255), new Rgb(222, 238, 244));
+        WritePanelLine(width, panelWidth, "  Controller backend", backend, new Rgb(82, 190, 255), new Rgb(222, 238, 244));
+        WritePanelLine(width, panelWidth, "  Controller read", readsController ? "active in this process" : "inactive", new Rgb(68, 214, 164), new Rgb(222, 238, 244));
+        WritePanelLine(width, panelWidth, "  Path", ShortenPath(processPath, panelWidth - 14), new Rgb(185, 204, 214), new Rgb(206, 220, 226));
+        WritePanelBorder(width, panelWidth, false, new Rgb(139, 160, 172));
+        Console.WriteLine("\x1b[0m");
+    }
+
+    private static void EnableAnsi() {
         try {
             IntPtr handle = GetStdHandle(-11);
             uint mode;
@@ -1438,56 +1498,18 @@ internal static class Program {
                 SetConsoleMode(handle, mode | 0x0004 | 0x0008);
             }
         } catch { }
-        
+
         try {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
         } catch { }
+    }
 
+    private static int GetConsoleWidth() {
         int width = 88;
         try { width = Console.WindowWidth; } catch { }
         if (width < 64) width = 64;
         if (width > 160) width = 160;
-
-        string[] logo = new string[] {
-            @"   _____ _     _ _    _ _____          _   ",
-            @"  / ____| |   (_) |  (_)  __ \        | |  ",
-            @" | (___ | |__  _| | ___| |__) |_ _  __| |  ",
-            @"  \___ \| '_ \| | |/ / |  ___/ _` |/ _` |  ",
-            @"  ____) | | | | |   <| | |  | (_| | (_| |  ",
-            @" |_____/|_| |_|_|_|\_\_|_|   \__,_|\__,_|  "
-        };
-        string[] faces = new string[] {
-            "(\u273F\u25E0\u203F\u25E0)", "(\uFF61\u30FB\u03C9\u30FB\uFF61)\uFF89\u2661", "(\u3065\uFF61\u25D5\u203F\u203F\u25D5\uFF61)\u3065",
-            "(\u2267\u25BD\u2266)", "(\u256F\u2727\u25BD\u2727)\u256F", "(\u2229^o^)\u2283\u2501\u2606",
-            "(\u3063\u02D8\u03C9\u02D8\u03C2 )", "(\u2744\u203F\u2744)", "(\u02D8\u035C\u02D8)",
-            "(\u00B4\uFF65\u1D17\uFF65`)", "(\u25D5\u203F\u25D5)", "(\u25E1\u203F\u25E1\u273F)",
-            "(\u2606\u25BD\u2606)", "(\uFF65\u2200\uFF65)", "(\u00B4\u2200`)\u2661"
-        };
-
-        Rgb[] faceColors = new Rgb[] {
-            new Rgb(255, 111, 145), new Rgb(255, 199, 95), new Rgb(68, 214, 164),
-            new Rgb(82, 190, 255), new Rgb(191, 132, 255), new Rgb(255, 150, 84),
-            new Rgb(118, 235, 255), new Rgb(255, 239, 138), new Rgb(141, 255, 184)
-        };
-        Rgb[] logoStops = new Rgb[] {
-            new Rgb(90, 255, 168), new Rgb(71, 203, 255),
-            new Rgb(255, 182, 73), new Rgb(255, 255, 255)
-        };
-
-        WriteFaceScatterLine(width, faces, faceColors, 1, "  ");
-        WriteMutedCentered(width, "Welcome to");
-        for (int i = 0; i < logo.Length; i++) {
-            WriteGradientCentered(width, logo[i], logoStops);
-        }
-        WriteFaceScatterLine(width, faces, faceColors, 5, "   ");
-        WriteMutedCentered(width, "Spring        Summer        Autumn");
-        WriteFaceScatterLine(width, faces, faceColors, 9, " ");
-        WriteMutedCentered(width, "Controller awake. Keyboard and mouse ready.");
-        WriteWinterLine(width, faces, 3);
-        WriteWinterLine(width, faces, 10);
-        WriteWinterLine(width, faces, 6);
-        WriteWhiteSnowLine(width);
-        Console.WriteLine("\x1b[0m");
+        return width;
     }
 
     private static string CenterLine(int width, string text) {
@@ -1544,60 +1566,227 @@ internal static class Program {
     }
 
     private static void WriteMutedCentered(int width, string text) {
-        WriteRgb(new Rgb(198, 218, 225), CenterLine(width, text));
+        WriteRgb(new Rgb(206, 225, 232), CenterLine(width, text));
         Console.WriteLine();
     }
 
-    private static void WriteFaceScatterLine(int width, string[] faces, Rgb[] colors, int seed, string gap) {
-        int used = 0;
-        int index = seed;
-        Console.Write(new string(' ', seed % 7));
-        used += seed % 7;
-        while (used < width) {
-            string face = faces[index % faces.Length];
-            string pad = new string(' ', ((index * 3) % 5) + gap.Length);
-            if (used + face.Length + pad.Length > width) break;
-            WriteRgb(colors[index % colors.Length], face);
-            WriteRgb(new Rgb(90, 104, 113), pad);
-            used += face.Length + pad.Length;
-            index++;
+    private static void WriteNeonRule(int width, int panelWidth, string title) {
+        int left = (width - panelWidth) / 2;
+        string line = "\u2726\u2500\u2500 " + title + " " + new string('\u2500', Math.Max(0, panelWidth - title.Length - 7)) + "\u2726";
+        Console.Write(new string(' ', left));
+        WriteGradientText(line, new Rgb[] {
+            new Rgb(76, 242, 255), new Rgb(174, 120, 255),
+            new Rgb(255, 109, 191), new Rgb(255, 221, 119)
+        });
+        Console.WriteLine();
+    }
+
+    private static void WriteGradientText(string text, Rgb[] stops) {
+        for (int i = 0; i < text.Length; i++) {
+            double t = text.Length <= 1 ? 1.0 : (double)i / (double)(text.Length - 1);
+            WriteRgb(GradientAt(stops, t), text[i].ToString());
         }
+    }
+
+    private static void WriteSeasonRail(int width, int panelWidth) {
+        int left = (width - panelWidth) / 2;
+        Console.Write(new string(' ', left));
+        WriteRgb(new Rgb(61, 78, 91), "\u256d" + new string('\u2500', panelWidth - 2) + "\u256e");
+        Console.WriteLine();
+
+        Console.Write(new string(' ', left));
+        WriteRgb(new Rgb(61, 78, 91), "\u2502");
+        int inner = panelWidth - 2;
+        string[] labels = new string[] { "\u273f Spring", "\u25c7 Summer", "\u25c8 Autumn", "\u2744 Winter" };
+        Rgb[] colors = new Rgb[] { new Rgb(115, 255, 190), new Rgb(255, 218, 113), new Rgb(255, 153, 90), new Rgb(246, 251, 255) };
+        int cell = inner / labels.Length;
+        int used = 0;
+        for (int i = 0; i < labels.Length; i++) {
+            int cellWidth = (i == labels.Length - 1) ? inner - used : cell;
+            string label = CenterLine(cellWidth, labels[i]);
+            WriteRgb(colors[i], label);
+            used += cellWidth;
+        }
+        WriteRgb(new Rgb(61, 78, 91), "\u2502");
+        Console.WriteLine();
+        Console.Write(new string(' ', left));
+        WriteRgb(new Rgb(61, 78, 91), "\u2570" + new string('\u2500', panelWidth - 2) + "\u256f");
         Console.WriteLine();
     }
 
-    private static void WriteWinterLine(int width, string[] faces, int seed) {
-        Rgb[] winter = new Rgb[] {
-            new Rgb(255, 255, 255), new Rgb(224, 246, 255),
-            new Rgb(190, 226, 255), new Rgb(238, 242, 255)
+    private static void WriteAtmosphereLine(int width, int panelWidth, int variant) {
+        string[] items = variant == 0
+            ? new string[] { "\u22c6", "(\u25d5\u203f\u25d5)", "\u273f", "\u25c7", "(\uFF61\u30fb\u03c9\u30fb\uFF61)", "\u2727" }
+            : new string[] { "\u2726", "\u273f", "(\u02d8\u03c9\u02d8)", "\u25c8", "\u2744", "(\u2606\u25bd\u2606)" };
+        Rgb[] colors = new Rgb[] {
+            new Rgb(130, 238, 255), new Rgb(255, 133, 197), new Rgb(126, 255, 190),
+            new Rgb(188, 133, 255), new Rgb(255, 210, 100), new Rgb(247, 252, 255)
         };
+        int left = (width - panelWidth) / 2;
+        Console.Write(new string(' ', left));
+        int inner = panelWidth;
+        int cell = inner / items.Length;
         int used = 0;
-        int faceIndex = seed % faces.Length;
-        int nextFaceAt = 4 + (seed % 9);
-        while (used < width) {
-            if (used >= nextFaceAt) {
-                string face = faces[faceIndex % faces.Length];
-                if (used + face.Length < width) {
-                    WriteRgb(winter[(faceIndex + seed) % winter.Length], face);
-                    used += face.Length;
-                    faceIndex += 5;
-                    nextFaceAt = used + 11 + (faceIndex % 8);
-                    continue;
-                }
-            }
-
-            string chunk = ((used + seed) % 6 == 0) ? "*" : (((used + seed) % 4 == 0) ? "." : " ");
-            WriteRgb(winter[(used + seed) % winter.Length], chunk);
-            used += chunk.Length;
+        for (int i = 0; i < items.Length; i++) {
+            int cellWidth = (i == items.Length - 1) ? inner - used : cell;
+            string item = CenterLine(cellWidth, items[i]);
+            WriteRgb(colors[(i + variant) % colors.Length], item);
+            used += cellWidth;
         }
         Console.WriteLine();
     }
 
-    private static void WriteWhiteSnowLine(int width) {
-        for (int i = 0; i < width; i++) {
-            Rgb color = (i % 3 == 0) ? new Rgb(255, 255, 255) : new Rgb(232, 248, 255);
-            WriteRgb(color, i % 5 == 0 ? "*" : "_");
-        }
+    private static void WriteLogoHalo(int width, int panelWidth, bool top) {
+        int left = (width - panelWidth) / 2;
+        string fill = top ? "\u00b7\u02d9\u00b7" : "\u00b7\u22c6\u00b7";
+        string line = "\u2727 " + RepeatPattern(fill, Math.Max(0, panelWidth - 4)) + " \u2727";
+        Console.Write(new string(' ', left));
+        WriteGradientText(line.Substring(0, Math.Min(line.Length, panelWidth)), new Rgb[] {
+            new Rgb(70, 213, 255), new Rgb(182, 126, 255), new Rgb(255, 132, 205),
+            new Rgb(255, 216, 117), new Rgb(255, 255, 255)
+        });
         Console.WriteLine();
+    }
+
+    private static void WritePixelSubline(int width, int panelWidth) {
+        int left = (width - panelWidth) / 2;
+        string text = "\u25a3 seasonal input mapper  \u25b8  physical keys / mouse / touch charge";
+        Console.Write(new string(' ', left));
+        WriteRgb(new Rgb(79, 97, 108), PadRight("", (panelWidth - text.Length) / 2));
+        WriteGradientText(text, new Rgb[] { new Rgb(120, 240, 255), new Rgb(255, 140, 205), new Rgb(255, 218, 112) });
+        Console.WriteLine();
+    }
+
+    private static void WriteStatusCard(int width, int panelWidth) {
+        WritePanelBorder(width, panelWidth, true, new Rgb(126, 226, 244));
+        WritePanelTitle(width, panelWidth, "\u25c7 SYSTEM STATUS \u25c7", new Rgb(235, 247, 252));
+        WritePanelSeparator(width, panelWidth, new Rgb(74, 94, 106));
+        WriteDoublePanelLine(width, panelWidth,
+            "Controller awake", "READY",
+            "Keyboard and mouse ready", "READY",
+            new Rgb(113, 255, 194), new Rgb(128, 224, 255));
+        WritePanelLine(width, panelWidth, "  Season cycle", "Spring / Summer / Autumn / Winter", new Rgb(255, 211, 106), new Rgb(235, 247, 252));
+        WritePanelLine(width, panelWidth, "  Exit command", "Press Q then Enter to exit", new Rgb(255, 142, 206), new Rgb(245, 250, 255));
+        WritePanelBorder(width, panelWidth, false, new Rgb(126, 226, 244));
+    }
+
+    private static void WriteSeasonDivider(int width, int panelWidth) {
+        int left = (width - panelWidth) / 2;
+        string text = "\u273f  Spring memory   \u25c7  Summer signal   \u25c8  Autumn keylight   \u2744  Winter layer online";
+        string rule = RepeatPattern("\u2500\u22c5", panelWidth);
+        Console.Write(new string(' ', left));
+        WriteGradientText(rule, new Rgb[] {
+            new Rgb(113, 255, 194), new Rgb(126, 226, 244), new Rgb(190, 133, 255),
+            new Rgb(255, 142, 206), new Rgb(255, 222, 124), new Rgb(255, 255, 255)
+        });
+        Console.WriteLine();
+        Console.Write(new string(' ', left));
+        WriteGradientText(CenterLine(panelWidth, text), new Rgb[] {
+            new Rgb(113, 255, 194), new Rgb(126, 226, 244), new Rgb(255, 166, 93), new Rgb(255, 255, 255)
+        });
+        Console.WriteLine();
+    }
+
+    private static void WritePanelBorder(int width, int panelWidth, bool top, Rgb color) {
+        int left = (width - panelWidth) / 2;
+        Console.Write(new string(' ', left));
+        string line = (top ? "\u256d" : "\u2570") + new string('\u2500', panelWidth - 2) + (top ? "\u256e" : "\u256f");
+        WriteRgb(color, line);
+        Console.WriteLine();
+    }
+
+    private static void WritePanelSeparator(int width, int panelWidth, Rgb color) {
+        int left = (width - panelWidth) / 2;
+        Console.Write(new string(' ', left));
+        WriteRgb(color, "\u2502" + new string('\u2504', panelWidth - 2) + "\u2502");
+        Console.WriteLine();
+    }
+
+    private static void WritePanelTitle(int width, int panelWidth, string title, Rgb color) {
+        int left = (width - panelWidth) / 2;
+        Console.Write(new string(' ', left));
+        WriteRgb(new Rgb(72, 91, 101), "\u2502");
+        WriteRgb(color, CenterLine(panelWidth - 2, title));
+        WriteRgb(new Rgb(72, 91, 101), "\u2502");
+        Console.WriteLine();
+    }
+
+    private static void WriteDoublePanelLine(int width, int panelWidth, string leftLabel, string leftValue, string rightLabel, string rightValue, Rgb leftColor, Rgb rightColor) {
+        int left = (width - panelWidth) / 2;
+        int inner = panelWidth - 2;
+        int gap = 5;
+        int column = (inner - gap) / 2;
+        string leftText = "\u25b8 " + leftLabel + "  | " + leftValue;
+        string rightText = "\u25b8 " + rightLabel + "  | " + rightValue;
+
+        Console.Write(new string(' ', left));
+        WriteRgb(new Rgb(72, 91, 101), "\u2502");
+        WriteRgb(leftColor, PadRight(TrimToWidth(leftText, column), column));
+        WriteRgb(new Rgb(72, 91, 101), "  \u2506  ");
+        WriteRgb(rightColor, PadRight(TrimToWidth(rightText, inner - column - gap), inner - column - gap));
+        WriteRgb(new Rgb(72, 91, 101), "\u2502");
+        Console.WriteLine();
+    }
+
+    private static void WritePanelLine(int width, int panelWidth, string label, string value, Rgb labelColor, Rgb valueColor) {
+        int left = (width - panelWidth) / 2;
+        int inner = panelWidth - 2;
+        int labelWidth = Math.Min(28, Math.Max(18, inner / 3));
+        int valueWidth = inner - labelWidth - 3;
+        if (value.Length > valueWidth) value = value.Substring(0, Math.Max(0, valueWidth - 1)) + "\u2026";
+
+        Console.Write(new string(' ', left));
+        WriteRgb(new Rgb(72, 91, 101), "\u2502");
+        WriteRgb(labelColor, PadRight(label, labelWidth));
+        WriteRgb(new Rgb(72, 91, 101), " \u2506 ");
+        WriteRgb(valueColor, PadRight(value, valueWidth));
+        WriteRgb(new Rgb(72, 91, 101), "\u2502");
+        Console.WriteLine();
+    }
+
+    private static string PadRight(string text, int width) {
+        if (text.Length >= width) return text.Substring(0, width);
+        return text + new string(' ', width - text.Length);
+    }
+
+    private static string TrimToWidth(string text, int width) {
+        if (text.Length <= width) return text;
+        if (width <= 1) return text.Substring(0, width);
+        return text.Substring(0, width - 1) + "\u2026";
+    }
+
+    private static string RepeatPattern(string pattern, int width) {
+        if (width <= 0) return "";
+        StringBuilder sb = new StringBuilder(width + pattern.Length);
+        while (sb.Length < width) sb.Append(pattern);
+        if (sb.Length > width) sb.Length = width;
+        return sb.ToString();
+    }
+
+    private static void WriteLiveStatusBar(int width, int panelWidth) {
+        int left = (width - panelWidth) / 2;
+        string text = "\u25c6 Live session  \u2506  Press Q then Enter to exit";
+        string rail = "\u256d" + RepeatPattern("\u2500\u22c5", panelWidth - 2) + "\u256e";
+        string bottom = "\u2570" + RepeatPattern("\u2500\u22c5", panelWidth - 2) + "\u256f";
+
+        Console.Write(new string(' ', left));
+        WriteGradientText(rail, new Rgb[] { new Rgb(84, 226, 255), new Rgb(181, 124, 255), new Rgb(255, 135, 205), new Rgb(255, 221, 120) });
+        Console.WriteLine();
+        Console.Write(new string(' ', left));
+        WriteRgb(new Rgb(72, 91, 101), "\u2502");
+        WriteGradientText(CenterLine(panelWidth - 2, text), new Rgb[] { new Rgb(119, 245, 255), new Rgb(255, 145, 211), new Rgb(255, 231, 136), new Rgb(255, 255, 255) });
+        WriteRgb(new Rgb(72, 91, 101), "\u2502");
+        Console.WriteLine();
+        Console.Write(new string(' ', left));
+        WriteGradientText(bottom, new Rgb[] { new Rgb(255, 255, 255), new Rgb(126, 226, 244), new Rgb(190, 133, 255), new Rgb(255, 222, 124) });
+        Console.WriteLine();
+    }
+
+    private static string ShortenPath(string path, int maxLength) {
+        if (path == null) return "";
+        if (path.Length <= maxLength) return path;
+        if (maxLength <= 4) return path.Substring(0, maxLength);
+        return "\u2026" + path.Substring(path.Length - maxLength + 1);
     }
 
     private static InputInjector _exitInjector;
@@ -1685,7 +1874,7 @@ internal static class Program {
         
 
         
-        Console.WriteLine("ShikiPad running. Press Q then Enter to exit.");
+        PrintRunHint();
         Thread inputThread = new Thread(delegate() {
             while (true) {
                 string line = Console.ReadLine();
