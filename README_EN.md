@@ -59,3 +59,25 @@ Open `shikipad.json` with Notepad:
 - **Right Stick Mouse Feel (`rightStickCurveExponent`)**: Default `2.2`. Higher values make small stick movements slower and more precise, while full stick deflection remains fast.
 - **Left Stick Release Deadzone (`leftStickExitDeadzone`)**: The threshold to release the modifier (combined with hysteresis to prevent jitter, default 0.25).
 - **After saving `shikipad.json`, no recompilation is needed. Simply restart `ShikiPad.exe` to apply changes instantly.**
+
+---
+
+## 🛡️ Advanced Guide: Making the Controller Work Everywhere
+
+### 1. Fixing Unresponsive Inputs in Elevated Windows and UAC Prompts
+Windows enforces strict security isolation. If your controller stops working in certain programs (running as Administrator) or on the UAC prompt, please configure the following:
+
+- **Bypassing Administrator UIPI**: `ShikiPad.exe` is now built with a manifest that automatically requests **Administrator Privileges** on launch. This allows your virtual keyboard and mouse inputs to seamlessly interact with any elevated programs.
+- **Bypassing UAC Secure Desktop (Dimmed Screen)**: By default, the Windows UAC prompt isolates input by jumping to a "Secure Desktop" where virtual inputs are blocked. To allow your controller to click "Yes", you must:
+  1. Press `Win` and search for **"Change User Account Control settings"** (UAC).
+  2. Pull the slider down one notch to **"Notify me only when apps try to make changes to my computer (do not dim my desktop)"**.
+  3. Click OK. Your controller now has absolute 24/7 control over your PC!
+
+### 2. Using HidHide to Prevent "Double Input" Issues
+Since ShikiPad maps your controller to a keyboard and mouse, games that natively support controllers will receive BOTH the physical controller inputs and the virtual keyboard inputs simultaneously, causing chaotic behavior. We highly recommend using **HidHide**:
+
+1. **Install HidHide**: Download and install [HidHide](https://github.com/nefarius/HidHide).
+2. **Hide the Physical Controller**: Open the HidHide Configuration Client, go to the `Devices` tab, check `Sony Interactive Entertainment Wireless Controller`, and check `Enable device hiding` at the bottom.
+3. **Whitelist ShikiPad**: Go to the `Applications` tab, click the `+` icon, and add your `ShikiPad.exe`.
+4. **Result**: Windows and all games will now be completely blind to your physical controller, only recognizing your virtual keyboard/mouse output. Because of the whitelist, ShikiPad can still exclusively read the raw USB signals!
+
