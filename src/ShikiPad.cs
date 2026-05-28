@@ -12,13 +12,8 @@ using System.Threading;
 using System.Windows.Forms;
 
 internal enum PhysicalKey {
-    None,
-    A, B, C, D, E, F, G, H, I, J, K, L, M,
-    N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
-    Num0, Num1, Num2, Num3, Num4, Num5, Num6, Num7, Num8, Num9,
-    Minus, Equals, LeftBracket, RightBracket, Backslash, Semicolon, Apostrophe, Comma, Period, Slash, Grave,
-    Space, Backspace, Enter, Tab, Escape, ArrowUp, ArrowDown, ArrowLeft, ArrowRight
-}
+      None, A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z, Num0, Num1, Num2, Num3, Num4, Num5, Num6, Num7, Num8, Num9, Minus, Equals, LeftBracket, RightBracket, Backslash, Semicolon, Apostrophe, Comma, Period, Slash, Grave, Space, Backspace, Enter, Tab, Escape, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, LShift, RShift, LCtrl, RCtrl, LAlt, RAlt, LWin, RWin, F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12
+    }
 
 internal enum Layer {
     Base,
@@ -61,12 +56,6 @@ internal enum HeldModifier {
     Win
 }
 
-internal struct Modifiers {
-    public bool Shift;
-    public bool Ctrl;
-    public bool Alt;
-    public bool Win;
-}
 
 internal sealed class Config {
     public bool Enabled = true;
@@ -276,8 +265,8 @@ internal sealed class MappingEngine {
         _tables[(int)Layer.L1] = new PhysicalKey[] { PhysicalKey.S, PhysicalKey.R, PhysicalKey.D, PhysicalKey.G, PhysicalKey.C, PhysicalKey.Y, PhysicalKey.L, PhysicalKey.Z };
         _tables[(int)Layer.R2] = new PhysicalKey[] { PhysicalKey.M, PhysicalKey.W, PhysicalKey.J, PhysicalKey.X, PhysicalKey.F, PhysicalKey.P, PhysicalKey.Q, PhysicalKey.B };
         _tables[(int)Layer.L2] = new PhysicalKey[] { PhysicalKey.K, PhysicalKey.V, PhysicalKey.Num1, PhysicalKey.Num2, PhysicalKey.Num4, PhysicalKey.Num5, PhysicalKey.Num3, PhysicalKey.Num6 };
-        _tables[(int)Layer.R1R2] = new PhysicalKey[] { PhysicalKey.Num7, PhysicalKey.Num8, PhysicalKey.Num9, PhysicalKey.Num0, PhysicalKey.Period, PhysicalKey.Minus, PhysicalKey.Comma, PhysicalKey.Equals };
-        _tables[(int)Layer.L1L2] = new PhysicalKey[] { PhysicalKey.Apostrophe, PhysicalKey.Slash, PhysicalKey.Semicolon, PhysicalKey.LeftBracket, PhysicalKey.Backslash, PhysicalKey.Grave, PhysicalKey.RightBracket, PhysicalKey.Space };
+          _tables[(int)Layer.R1R2] = new PhysicalKey[] { PhysicalKey.Num7, PhysicalKey.Num8, PhysicalKey.Num9, PhysicalKey.Num0, PhysicalKey.Equals, PhysicalKey.Comma, PhysicalKey.Minus, PhysicalKey.Period };
+          _tables[(int)Layer.L1L2] = new PhysicalKey[] { PhysicalKey.Apostrophe, PhysicalKey.Slash, PhysicalKey.Semicolon, PhysicalKey.LeftBracket, PhysicalKey.Backslash, PhysicalKey.Grave, PhysicalKey.RightBracket, PhysicalKey.None };
     }
 
     public Layer Resolve(bool l1, bool r1, bool l2, bool r2, double l1Ms, double r1Ms, double l2Ms, double r2Ms) {
@@ -339,9 +328,6 @@ internal sealed class InputInjector {
         _win = Resolve(0x5B, true);
     }
 
-    public void KeyTap(PhysicalKey key, Modifiers mods) {
-        KeyTap(key, mods.Shift, mods.Ctrl, mods.Alt, mods.Win);
-    }
 
     public void KeyDown(PhysicalKey key) {
         if (key == PhysicalKey.None || !_keys.ContainsKey(key)) return;
@@ -476,6 +462,26 @@ internal sealed class InputInjector {
         Add(PhysicalKey.ArrowDown, 0x28, true);
         Add(PhysicalKey.ArrowLeft, 0x25, true);
         Add(PhysicalKey.ArrowRight, 0x27, true);
+        Add(PhysicalKey.F1, 0x70, false);
+        Add(PhysicalKey.F2, 0x71, false);
+        Add(PhysicalKey.F3, 0x72, false);
+        Add(PhysicalKey.F4, 0x73, false);
+        Add(PhysicalKey.F5, 0x74, false);
+        Add(PhysicalKey.F6, 0x75, false);
+        Add(PhysicalKey.F7, 0x76, false);
+        Add(PhysicalKey.F8, 0x77, false);
+        Add(PhysicalKey.F9, 0x78, false);
+        Add(PhysicalKey.F10, 0x79, false);
+        Add(PhysicalKey.F11, 0x7A, false);
+        Add(PhysicalKey.F12, 0x7B, false);
+        Add(PhysicalKey.LWin, 0x5B, true);
+        Add(PhysicalKey.RWin, 0x5C, true);
+        Add(PhysicalKey.LAlt, 0x38, false);
+        Add(PhysicalKey.LCtrl, 0x1D, false);
+        Add(PhysicalKey.LShift, 0x2A, false);
+        Add(PhysicalKey.RAlt, 0x38, true);
+        Add(PhysicalKey.RCtrl, 0x1D, true);
+        Add(PhysicalKey.RShift, 0x36, false);
     }
 
     private void Add(PhysicalKey key, ushort vk, bool extended) {
@@ -586,6 +592,7 @@ internal sealed class ControllerState {
     public bool Up, Right, Down, Left, Square, Triangle, Cross, Circle;
     public bool L1, R1, L3, R3, Options, Create;
     public bool TouchActive;
+      public bool TouchClick;
     public double TouchX, TouchY;
 }
 
@@ -731,6 +738,7 @@ internal sealed class DirectHidController {
         
         State.Create = (b2 & 0x10) != 0;
         State.Options = (b2 & 0x20) != 0;
+        State.TouchClick = (r[10] & 0x02) != 0;
         State.L3 = (b2 & 0x40) != 0;
         State.R3 = (b2 & 0x80) != 0;
     }
@@ -862,8 +870,7 @@ internal sealed class MapperForm : Form {
     private bool _l2Pressed;
     private bool _r2Pressed;
     private StickDirection _leftDirection = StickDirection.None;
-    private StickDirection _leftStickHeldDirection = StickDirection.None;
-    private double _scrollNextMs;
+      private double _scrollNextMs;
     private double _rightNeutralX;
     private double _rightNeutralY;
     private double _mouseAccumX;
@@ -871,7 +878,10 @@ internal sealed class MapperForm : Form {
     private double _mouseFreezeUntilMs;
     private bool _leftMouseDown;
     private bool _rightMouseDown;
-    private Modifiers _heldStickMods;
+      private System.Collections.Generic.List<PhysicalKey> _accumulatedModifiers = new System.Collections.Generic.List<PhysicalKey>();
+      private System.Collections.Generic.List<PhysicalKey> _heldLeftStickKeys = new System.Collections.Generic.List<PhysicalKey>();
+      private PhysicalKey _fnActiveKey = PhysicalKey.None;
+      private bool _prevTouchClick;
     private double _disableStartMs;
     private bool _disableArmed = true;
     private bool _touchTracking;
@@ -945,8 +955,6 @@ internal sealed class MapperForm : Form {
         UpdateEmergency(s, now);
         if (!s.Connected || !_enabled) {
             ReleaseHeldActionKeys();
-            SetHeldStickModifiers(new Modifiers(), StickDirection.None);
-            _leftStickHeldDirection = StickDirection.None;
             _leftDirection = StickDirection.None;
             _scrollNextMs = 0;
             return;
@@ -971,6 +979,18 @@ internal sealed class MapperForm : Form {
         } else if (_r2Pressed && s.R2 < _config.TriggerReleaseThreshold) _r2Pressed = false;
     }
 
+    private PhysicalKey GetLeftStickKey(StickDirection dir) {
+        switch (dir) {
+            case StickDirection.Right: return PhysicalKey.LWin;
+            case StickDirection.DownRight: return PhysicalKey.LAlt;
+            case StickDirection.DownLeft: return PhysicalKey.LCtrl;
+            case StickDirection.Left: return PhysicalKey.LShift;
+            case StickDirection.UpLeft: return PhysicalKey.Escape;
+            case StickDirection.UpRight: return _fnActiveKey;
+            default: return PhysicalKey.None;
+        }
+    }
+
     private void UpdateLeftStick(ControllerState s, double now) {
         double radius = Math.Sqrt(s.LX * s.LX + s.LY * s.LY);
         StickDirection previous = _leftDirection;
@@ -979,9 +999,6 @@ internal sealed class MapperForm : Form {
         if (previous == StickDirection.None) {
             if (radius < _config.LeftStickEnterDeadzone) return;
             next = Sector(s.LX, s.LY);
-            DebugAltTab("left stick latch: radius=" + radius.ToString("0.###", CultureInfo.InvariantCulture) +
-                        ", angle=" + AngleDegrees(s.LX, s.LY).ToString("0.#", CultureInfo.InvariantCulture) +
-                        ", direction=" + next);
         } else if (radius < _config.LeftStickExitDeadzone) {
             next = StickDirection.None;
         } else {
@@ -989,45 +1006,88 @@ internal sealed class MapperForm : Form {
         }
 
         if (next != previous) {
-            if (previous != StickDirection.None) DebugAltTab("left stick leave: " + previous);
             _leftDirection = next;
-            if (_leftDirection != StickDirection.None) DebugAltTab("left stick enter: " + _leftDirection + ", raw radius=" + radius.ToString("0.###", CultureInfo.InvariantCulture));
-            UpdateHeldModifierDirection(_leftDirection);
             _scrollNextMs = 0;
-            if (_leftDirection == StickDirection.UpRight) {
-                DebugSources("Source=LeftStick Direction=UpRight -> EscapeTap");
-                _injector.CurrentSource = "LeftStick";
-                _injector.CurrentReason = "UpRight";
-                _injector.KeyTap(PhysicalKey.Escape, false, false, false, false);
+        }
+
+        bool touchJustPressed = s.TouchClick && !_prevTouchClick;
+        bool touchJustReleased = !s.TouchClick && _prevTouchClick;
+        _prevTouchClick = s.TouchClick;
+
+        System.Collections.Generic.List<PhysicalKey> desiredKeys = new System.Collections.Generic.List<PhysicalKey>();
+
+        if (_leftDirection != StickDirection.None) {
+            PhysicalKey rawStickKey = GetLeftStickKey(_leftDirection);
+            if (s.TouchClick) {
+                if (rawStickKey != PhysicalKey.None && !_accumulatedModifiers.Contains(rawStickKey)) {
+                    _accumulatedModifiers.Add(rawStickKey);
+                }
+            } else {
+                if (_accumulatedModifiers.Count > 0) {
+                    desiredKeys.AddRange(_accumulatedModifiers);
+                } else {
+                    if (rawStickKey != PhysicalKey.None) {
+                        desiredKeys.Add(rawStickKey);
+                    }
+                }
+            }
+        } else {
+            if (!s.TouchClick) {
+                _accumulatedModifiers.Clear();
+                _fnActiveKey = PhysicalKey.None;
+            } else {
+                _fnActiveKey = PhysicalKey.None;
             }
         }
 
-        if (_leftDirection != StickDirection.Up && _leftDirection != StickDirection.Down) {
-            _scrollNextMs = 0;
-            return;
+        foreach (var key in _heldLeftStickKeys) {
+            if (!desiredKeys.Contains(key)) {
+                _injector.KeyUp(key);
+                _injector.CurrentSource = "LeftStick";
+                _injector.CurrentReason = "ModifierUp " + key;
+            }
+        }
+        foreach (var key in desiredKeys) {
+            if (!_heldLeftStickKeys.Contains(key)) {
+                _injector.KeyDown(key);
+                _injector.CurrentSource = "LeftStick";
+                _injector.CurrentReason = "ModifierDown " + key;
+            }
         }
         
-        if (now < _scrollNextMs) return;
-        
-        if (_leftDirection != StickDirection.Up && _leftDirection != StickDirection.Down) {
-            DebugAltTab("ERROR: left-stick magnitude repeat fired outside Up/Down");
-            _scrollNextMs = 0;
-            return;
-        }
+        _heldLeftStickKeys.Clear();
+        _heldLeftStickKeys.AddRange(desiredKeys);
 
-        DebugAltTab("left-stick repeat timer firing for " + _leftDirection);
+        if (_leftDirection != StickDirection.Up && _leftDirection != StickDirection.Down) {
+            _scrollNextMs = 0;
+            return;
+        }
+        if (now < _scrollNextMs) return;
+
         _injector.CurrentSource = "LeftStick";
         _injector.CurrentReason = "RepeatTimer " + _leftDirection;
         _injector.MouseWheel(_leftDirection == StickDirection.Up ? 1 : -1);
-        if (_leftDirection == StickDirection.Down) {
-            DebugAltTab("WheelDown event");
-            DebugSources("Source=LeftStick Direction=Down -> WheelDown");
-        } else if (_leftDirection == StickDirection.Up) {
-            DebugSources("Source=LeftStick Direction=Up -> WheelUp");
-        }
+        
         double normalized = Clamp((radius - _config.LeftStickEnterDeadzone) / (1.0 - _config.LeftStickEnterDeadzone), 0.0, 1.0);
         double interval = _config.ScrollSlowIntervalMs + (_config.ScrollFastIntervalMs - _config.ScrollSlowIntervalMs) * normalized;
         _scrollNextMs = now + Math.Max(1.0, interval);
+    }
+    private PhysicalKey TranslateToFKey(PhysicalKey numberKey) {
+        switch (numberKey) {
+            case PhysicalKey.Num1: return PhysicalKey.F1;
+            case PhysicalKey.Num2: return PhysicalKey.F2;
+            case PhysicalKey.Num3: return PhysicalKey.F3;
+            case PhysicalKey.Num4: return PhysicalKey.F4;
+            case PhysicalKey.Num5: return PhysicalKey.F5;
+            case PhysicalKey.Num6: return PhysicalKey.F6;
+            case PhysicalKey.Num7: return PhysicalKey.F7;
+            case PhysicalKey.Num8: return PhysicalKey.F8;
+            case PhysicalKey.Num9: return PhysicalKey.F9;
+            case PhysicalKey.Num0: return PhysicalKey.F10;
+            case PhysicalKey.Minus: return PhysicalKey.F11;
+            case PhysicalKey.Equals: return PhysicalKey.F12;
+            default: return PhysicalKey.None;
+        }
     }
 
     private void UpdateActionButtons(ControllerState s, double now) {
@@ -1041,7 +1101,19 @@ internal sealed class MapperForm : Form {
 
             if (!prev && curr) {
                 // 0 -> 1: KeyDown edge (Buffered)
-                PhysicalKey key = _mapping.Lookup(layer, (ActionButton)i);
+        PhysicalKey key = _mapping.Lookup(layer, (ActionButton)i);
+        
+        StickDirection leftDir = Sector(s.LX, s.LY);
+        if (leftDir == StickDirection.UpRight) {
+            PhysicalKey fKey = TranslateToFKey(key);
+            if (fKey != PhysicalKey.None) {
+                if (!prev && curr) {
+                    _fnActiveKey = fKey;
+                }
+                _prevDown[i] = curr;
+                continue;
+            }
+        }
                 
                 hold.Down = true;
                 hold.Key = key;
@@ -1056,7 +1128,6 @@ internal sealed class MapperForm : Form {
                 hold.LayerChangeSilenceUntilMs = 0; // No silence
                 
                 _holds[i] = hold;
-                DebugLogHeldKeys();
             } else if (prev && !curr) {
                 // 1 -> 0: KeyUp edge
                 if (hold.KeyIsDown) {
@@ -1070,7 +1141,6 @@ internal sealed class MapperForm : Form {
                     _injector.KeyUp(hold.Key);
                 }
                 _holds[i] = new ButtonHold();
-                DebugLogHeldKeys();
             } else if (prev && curr) {
                 // 1 -> 1: Typematic Repeat and Layer Transition
                 PhysicalKey currentLayerKey = _mapping.Lookup(layer, (ActionButton)i);
@@ -1263,8 +1333,6 @@ internal sealed class MapperForm : Form {
 
     private void ReleaseRuntimeHolds() {
         ReleaseHeldActionKeys();
-        SetHeldStickModifiers(new Modifiers(), StickDirection.None);
-        _leftStickHeldDirection = StickDirection.None;
         _injector.ReleaseAll();
         _leftMouseDown = false;
         _rightMouseDown = false;
@@ -1280,71 +1348,6 @@ internal sealed class MapperForm : Form {
             }
             _holds[i] = new ButtonHold();
         }
-    }
-
-    private void UpdateHeldModifierDirection(StickDirection direction) {
-        StickDirection heldDirection = IsHeldModifierDirection(direction) ? direction : StickDirection.None;
-        if (heldDirection == _leftStickHeldDirection) return;
-
-        SetHeldStickModifiers(new Modifiers(), StickDirection.None);
-        _leftStickHeldDirection = StickDirection.None;
-
-        if (heldDirection != StickDirection.None) {
-            SetHeldStickModifiers(ModsForHeldDirection(heldDirection), heldDirection);
-            _leftStickHeldDirection = heldDirection;
-        }
-    }
-
-    private void DebugLogHeldKeys() {
-        if (!_debugAltTab) return;
-        string held = "Held keys:";
-        if (_heldStickMods.Alt) held += " Alt";
-        if (_heldStickMods.Ctrl) held += " Ctrl";
-        if (_heldStickMods.Shift) held += " Shift";
-        if (_heldStickMods.Win) held += " Win";
-        for (int i = 0; i < 8; i++) {
-            if (_holds[i].Down && _holds[i].KeyIsDown) {
-                held += " " + MappingEngine.KeyName(_holds[i].Key);
-            }
-        }
-        if (held == "Held keys:") held = "Held keys: None";
-        DebugAltTab(held);
-    }
-
-    private void SetHeldStickModifiers(Modifiers desired, StickDirection dir) {
-        if (SameModifiers(_heldStickMods, desired)) return;
-
-        ReleaseStickModifiers(_heldStickMods, _leftStickHeldDirection);
-        PressStickModifiers(desired, dir);
-        _heldStickMods = desired;
-        
-        DebugLogHeldKeys();
-    }
-
-    private void ReleaseStickModifiers(Modifiers mods, StickDirection dir) {
-        _injector.CurrentSource = "LeftStick";
-        _injector.CurrentReason = "ModifierUp " + dir;
-        if (mods.Shift) { _injector.ModifierUp(HeldModifier.Shift); DebugSources("Source=LeftStick Direction=" + dir + " -> ShiftUp"); }
-        if (mods.Ctrl) { _injector.ModifierUp(HeldModifier.Ctrl); DebugSources("Source=LeftStick Direction=" + dir + " -> CtrlUp"); }
-        if (mods.Alt) {
-            _injector.ModifierUp(HeldModifier.Alt);
-            DebugSources("Source=LeftStick Direction=" + dir + " -> AltUp");
-            DebugAltTab("Alt up");
-        }
-        if (mods.Win) { _injector.ModifierUp(HeldModifier.Win); DebugSources("Source=LeftStick Direction=" + dir + " -> WinUp"); }
-    }
-
-    private void PressStickModifiers(Modifiers mods, StickDirection dir) {
-        _injector.CurrentSource = "LeftStick";
-        _injector.CurrentReason = "ModifierDown " + dir;
-        if (mods.Ctrl) { _injector.ModifierDown(HeldModifier.Ctrl); DebugSources("Source=LeftStick Direction=" + dir + " -> CtrlDown"); }
-        if (mods.Shift) { _injector.ModifierDown(HeldModifier.Shift); DebugSources("Source=LeftStick Direction=" + dir + " -> ShiftDown"); }
-        if (mods.Alt) {
-            _injector.ModifierDown(HeldModifier.Alt);
-            DebugSources("Source=LeftStick Direction=" + dir + " -> AltDown");
-            DebugAltTab("Alt down");
-        }
-        if (mods.Win) { _injector.ModifierDown(HeldModifier.Win); DebugSources("Source=LeftStick Direction=" + dir + " -> WinDown"); }
     }
 
     private double NowMs() { return _clock.Elapsed.TotalMilliseconds; }
@@ -1383,27 +1386,8 @@ internal sealed class MapperForm : Form {
         return Math.Atan2(-y, x) * 180.0 / Math.PI;
     }
 
-    private static bool SameModifiers(Modifiers a, Modifiers b) {
-        return a.Shift == b.Shift && a.Ctrl == b.Ctrl && a.Alt == b.Alt && a.Win == b.Win;
-    }
 
-    private static bool IsHeldModifierDirection(StickDirection d) {
-        return d == StickDirection.Right ||
-               d == StickDirection.DownRight ||
-               d == StickDirection.DownLeft ||
-               d == StickDirection.Left ||
-               d == StickDirection.UpLeft;
-    }
 
-    private static Modifiers ModsForHeldDirection(StickDirection d) {
-        Modifiers m = new Modifiers();
-        if (d == StickDirection.Right) m.Win = true;
-        else if (d == StickDirection.DownRight) m.Alt = true;
-        else if (d == StickDirection.DownLeft) m.Ctrl = true;
-        else if (d == StickDirection.Left) { m.Ctrl = true; m.Shift = true; }
-        else if (d == StickDirection.UpLeft) m.Shift = true;
-        return m;
-    }
 
     private static double Clamp(double value, double min, double max) { return value < min ? min : (value > max ? max : value); }
 
