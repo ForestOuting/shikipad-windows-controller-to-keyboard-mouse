@@ -45,6 +45,60 @@ ShikiPad is a Windows keyboard/mouse mapping tool specifically designed for the 
 
 *(Note: Holding a base face button and dynamically pressing/releasing shoulder modifiers will seamlessly transition the output letter instantly!)*
 
+- **Shift Behavior**: ShikiPad outputs real physical key presses. Shift+key combinations follow your Windows keyboard layout naturally:
+  - `1`+Shift = `!`, `9`+Shift = `(`, `-`+Shift = `_`, `'`+Shift = `"`, etc.
+
+---
+
+## 🎮 Touchpad Accumulator ("Charge & Release" System)
+
+The DualSense touchpad acts as a **clutch** to build up complex multi-modifier key combinations before executing them all at once.
+
+### How It Works
+
+1. **Single modifier (no touchpad)**: Simply push the left stick to Shift/Ctrl/Alt/Win/Esc — it activates immediately and stays held until the stick returns to the deadzone. This is the normal behavior.
+
+2. **Multi-modifier combo (with touchpad)**:
+   - **Hold the touchpad** (left, center, or right — all work).
+   - While holding the touchpad, move the left stick through different directions. Each direction's key is **silently accumulated** into a pool (not sent to the PC).
+   - **Release the touchpad** while the stick is on a modifier direction → all accumulated keys **fire simultaneously** and stay held as long as the stick remains outside the deadzone.
+   - **Release the touchpad** while the stick is in the deadzone → the entire accumulation is **cancelled**, nothing is sent.
+
+3. **Example: Alt+F4**
+   - Push stick to Fn (↗), hold touchpad, press `4` on L2 layer → F4 is accumulated.
+   - Return stick to deadzone (still holding touchpad).
+   - Push stick to Alt (↘).
+   - Release touchpad → **Alt+F4** fires simultaneously!
+
+4. **Example: Ctrl+Shift+F5**
+   - Hold touchpad → push stick to Ctrl (↙) → accumulated.
+   - Push stick to Shift (←) → accumulated.
+   - Push stick to Fn (↗), press `5` → F5 accumulated.
+   - Release touchpad → **Ctrl+Shift+F5** fires!
+
+---
+
+## ⌨️ Fn Key Layer (Left Stick ↗)
+
+Push the left stick to the **upper-right (↗)** direction to activate the Fn layer. While held in this direction, pressing number keys on the L2 or R1+R2 layers will be intercepted and converted to function keys:
+
+| Number Key | Output |
+|---|---|
+| 1 | F1 |
+| 2 | F2 |
+| 3 | F3 |
+| 4 | F4 |
+| 5 | F5 |
+| 6 | F6 |
+| 7 | F7 |
+| 8 | F8 |
+| 9 | F9 |
+| 0 | F10 |
+| - | F11 |
+| = | F12 |
+
+The Fn direction fully respects the stick latching system — once triggered, even if your thumb wobbles slightly, the direction remains locked until the stick returns to the deadzone.
+
 ---
 
 ## 🎛️ How to Adjust Controller Deadzones & Sensitivity

@@ -31,9 +31,9 @@ internal enum ActionButton {
     Right,
     Square,
     Triangle,
+    Left,
     Down,
     Cross,
-    Left,
     Circle
 }
 
@@ -254,34 +254,24 @@ internal sealed class MappingEngine {
 
     public MappingEngine() {
         _tables = new PhysicalKey[7][];
-        _tables[(int)Layer.Base] = new PhysicalKey[] { PhysicalKey.ArrowUp, PhysicalKey.ArrowRight, PhysicalKey.Space, PhysicalKey.Backspace, PhysicalKey.ArrowDown, PhysicalKey.Enter, PhysicalKey.ArrowLeft, PhysicalKey.Tab };
-        // Wait, Base array: 0(Up):Up, 1(Right):Right, 2(Square):Square?, 3(Triangle):Triangle? 
-        // Original was: Up, Right, Space, Backspace, Down, Enter, Left, Tab
-        // Up(0), Right(1), Square(2)=Space, Triangle(3)=Backspace, Down(4), Cross(5)=Enter, Left(6), Circle(7)=Tab
-        _tables[(int)Layer.Base] = new PhysicalKey[] { PhysicalKey.ArrowUp, PhysicalKey.ArrowRight, PhysicalKey.Space, PhysicalKey.Backspace, PhysicalKey.ArrowDown, PhysicalKey.Enter, PhysicalKey.ArrowLeft, PhysicalKey.Tab };
-        
-        // user mappings: 0=Up, 1=Right, 2=Square, 3=Triangle, 4=Down, 5=Cross, 6=Left, 7=Circle
-        _tables[(int)Layer.R1] = new PhysicalKey[] { PhysicalKey.I, PhysicalKey.N, PhysicalKey.E, PhysicalKey.A, PhysicalKey.T, PhysicalKey.H, PhysicalKey.O, PhysicalKey.U };
-        _tables[(int)Layer.L1] = new PhysicalKey[] { PhysicalKey.S, PhysicalKey.R, PhysicalKey.D, PhysicalKey.G, PhysicalKey.C, PhysicalKey.Y, PhysicalKey.L, PhysicalKey.Z };
-        _tables[(int)Layer.R2] = new PhysicalKey[] { PhysicalKey.M, PhysicalKey.W, PhysicalKey.J, PhysicalKey.X, PhysicalKey.F, PhysicalKey.P, PhysicalKey.Q, PhysicalKey.B };
-        _tables[(int)Layer.L2] = new PhysicalKey[] { PhysicalKey.K, PhysicalKey.V, PhysicalKey.Num1, PhysicalKey.Num2, PhysicalKey.Num4, PhysicalKey.Num5, PhysicalKey.Num3, PhysicalKey.Num6 };
-          _tables[(int)Layer.R1R2] = new PhysicalKey[] { PhysicalKey.Num7, PhysicalKey.Num8, PhysicalKey.Num9, PhysicalKey.Num0, PhysicalKey.Minus, PhysicalKey.Equals, PhysicalKey.Comma, PhysicalKey.Period };
-          _tables[(int)Layer.L1L2] = new PhysicalKey[] { PhysicalKey.Apostrophe, PhysicalKey.Slash, PhysicalKey.Semicolon, PhysicalKey.LeftBracket, PhysicalKey.RightBracket, PhysicalKey.Backslash, PhysicalKey.Grave, PhysicalKey.None };
+        _tables[(int)Layer.Base] = new PhysicalKey[] { PhysicalKey.ArrowUp, PhysicalKey.ArrowRight, PhysicalKey.Space, PhysicalKey.Backspace, PhysicalKey.ArrowLeft, PhysicalKey.ArrowDown, PhysicalKey.Enter, PhysicalKey.Tab };
+        _tables[(int)Layer.R1] = new PhysicalKey[] { PhysicalKey.I, PhysicalKey.N, PhysicalKey.E, PhysicalKey.A, PhysicalKey.O, PhysicalKey.T, PhysicalKey.H, PhysicalKey.U };
+        _tables[(int)Layer.L1] = new PhysicalKey[] { PhysicalKey.S, PhysicalKey.R, PhysicalKey.D, PhysicalKey.G, PhysicalKey.L, PhysicalKey.C, PhysicalKey.Y, PhysicalKey.Z };
+        _tables[(int)Layer.R2] = new PhysicalKey[] { PhysicalKey.M, PhysicalKey.W, PhysicalKey.J, PhysicalKey.X, PhysicalKey.Q, PhysicalKey.F, PhysicalKey.P, PhysicalKey.B };
+        _tables[(int)Layer.L2] = new PhysicalKey[] { PhysicalKey.K, PhysicalKey.V, PhysicalKey.Num1, PhysicalKey.Num2, PhysicalKey.Num3, PhysicalKey.Num4, PhysicalKey.Num5, PhysicalKey.Num6 };
+        _tables[(int)Layer.R1R2] = new PhysicalKey[] { PhysicalKey.Num7, PhysicalKey.Num8, PhysicalKey.Num9, PhysicalKey.Num0, PhysicalKey.Minus, PhysicalKey.Equals, PhysicalKey.Comma, PhysicalKey.Period };
+        _tables[(int)Layer.L1L2] = new PhysicalKey[] { PhysicalKey.Apostrophe, PhysicalKey.Slash, PhysicalKey.Semicolon, PhysicalKey.LeftBracket, PhysicalKey.RightBracket, PhysicalKey.Backslash, PhysicalKey.Grave, PhysicalKey.None };
     }
 
     public Layer Resolve(bool l1, bool r1, bool l2, bool r2, double l1Ms, double r1Ms, double l2Ms, double r2Ms) {
-        if (r1 && r2) return Layer.R1R2;
-        if (l1 && l2) return Layer.L1L2;
-        
-        double maxMs = -1;
-        Layer latest = Layer.Base;
-        
-        if (l1 && l1Ms > maxMs) { maxMs = l1Ms; latest = Layer.L1; }
-        if (r1 && r1Ms > maxMs) { maxMs = r1Ms; latest = Layer.R1; }
-        if (l2 && l2Ms > maxMs) { maxMs = l2Ms; latest = Layer.L2; }
-        if (r2 && r2Ms > maxMs) { maxMs = r2Ms; latest = Layer.R2; }
-        
-        return latest;
+        if (r1 && r2 && !l1 && !l2) return Layer.R1R2;
+        if (l1 && l2 && !r1 && !r2) return Layer.L1L2;
+        if (l1 && !r1 && !l2 && !r2) return Layer.L1;
+        if (r1 && !l1 && !l2 && !r2) return Layer.R1;
+        if (l2 && !l1 && !r1 && !r2) return Layer.L2;
+        if (r2 && !l1 && !r1 && !l2) return Layer.R2;
+        if (!l1 && !r1 && !l2 && !r2) return Layer.Base;
+        return Layer.Reserved;
     }
 
     public PhysicalKey Lookup(Layer layer, ActionButton action) {
@@ -880,7 +870,7 @@ internal sealed class MapperForm : Form {
     private bool _rightMouseDown;
       private System.Collections.Generic.List<PhysicalKey> _accumulatedModifiers = new System.Collections.Generic.List<PhysicalKey>();
       private System.Collections.Generic.List<PhysicalKey> _heldLeftStickKeys = new System.Collections.Generic.List<PhysicalKey>();
-      private PhysicalKey _fnActiveKey = PhysicalKey.None;
+      private System.Collections.Generic.List<PhysicalKey> _activeFnKeys = new System.Collections.Generic.List<PhysicalKey>();
       private bool _prevTouchClick;
     private double _disableStartMs;
     private bool _disableArmed = true;
@@ -986,7 +976,6 @@ internal sealed class MapperForm : Form {
             case StickDirection.DownLeft: return PhysicalKey.LCtrl;
             case StickDirection.Left: return PhysicalKey.LShift;
             case StickDirection.UpLeft: return PhysicalKey.Escape;
-            case StickDirection.UpRight: return _fnActiveKey;
             default: return PhysicalKey.None;
         }
     }
@@ -1012,32 +1001,34 @@ internal sealed class MapperForm : Form {
         }
 
         bool touchJustPressed = s.TouchClick && !_prevTouchClick;
-        bool touchJustReleased = !s.TouchClick && _prevTouchClick;
         _prevTouchClick = s.TouchClick;
 
         System.Collections.Generic.List<PhysicalKey> desiredKeys = new System.Collections.Generic.List<PhysicalKey>();
 
+        if (touchJustPressed) {
+            foreach (var key in _heldLeftStickKeys) {
+                AccumulateLeftStickKey(key);
+            }
+            _activeFnKeys.Clear();
+        }
+
         if (_leftDirection != StickDirection.None) {
             PhysicalKey rawStickKey = GetLeftStickKey(_leftDirection);
             if (s.TouchClick) {
-                if (rawStickKey != PhysicalKey.None && !_accumulatedModifiers.Contains(rawStickKey)) {
-                    _accumulatedModifiers.Add(rawStickKey);
-                }
+                AccumulateLeftStickKey(rawStickKey);
             } else {
                 if (_accumulatedModifiers.Count > 0) {
+                    AccumulateLeftStickKey(rawStickKey);
                     desiredKeys.AddRange(_accumulatedModifiers);
                 } else {
-                    if (rawStickKey != PhysicalKey.None) {
-                        desiredKeys.Add(rawStickKey);
-                    }
+                    AddUnique(desiredKeys, rawStickKey);
+                    foreach (var key in _activeFnKeys) AddUnique(desiredKeys, key);
                 }
             }
         } else {
             if (!s.TouchClick) {
                 _accumulatedModifiers.Clear();
-                _fnActiveKey = PhysicalKey.None;
-            } else {
-                _fnActiveKey = PhysicalKey.None;
+                _activeFnKeys.Clear();
             }
         }
 
@@ -1058,6 +1049,11 @@ internal sealed class MapperForm : Form {
         
         _heldLeftStickKeys.Clear();
         _heldLeftStickKeys.AddRange(desiredKeys);
+
+        if (s.TouchClick) {
+            _scrollNextMs = 0;
+            return;
+        }
 
         if (_leftDirection != StickDirection.Up && _leftDirection != StickDirection.Down) {
             _scrollNextMs = 0;
@@ -1091,47 +1087,88 @@ internal sealed class MapperForm : Form {
         }
     }
 
+    private PhysicalKey ApplyFnLayer(PhysicalKey key) {
+        if (_leftDirection != StickDirection.UpRight) return key;
+        return TranslateToFKey(key);
+    }
+
+    private static bool IsFunctionKey(PhysicalKey key) {
+        return key >= PhysicalKey.F1 && key <= PhysicalKey.F12;
+    }
+
+    private static void AddUnique(System.Collections.Generic.List<PhysicalKey> keys, PhysicalKey key) {
+        if (key != PhysicalKey.None && !keys.Contains(key)) {
+            keys.Add(key);
+        }
+    }
+
+    private void AccumulateLeftStickKey(PhysicalKey key) {
+        AddUnique(_accumulatedModifiers, key);
+    }
+
+    private void ActivateFnKey(PhysicalKey key, bool touchDown) {
+        if (!IsFunctionKey(key)) return;
+
+        if (touchDown) {
+            AccumulateLeftStickKey(key);
+            return;
+        }
+
+        if (!_activeFnKeys.Contains(key)) {
+            _activeFnKeys.Add(key);
+        }
+
+        if (!_heldLeftStickKeys.Contains(key)) {
+            _injector.CurrentSource = "LeftStickFn";
+            _injector.CurrentReason = "Fn " + key;
+            _injector.KeyDown(key);
+            _heldLeftStickKeys.Add(key);
+        }
+    }
+
     private void UpdateActionButtons(ControllerState s, double now) {
-        bool[] currentDown = new bool[] { s.Up, s.Right, s.Square, s.Triangle, s.Down, s.Cross, s.Left, s.Circle };
+        bool[] currentDown = new bool[] { s.Up, s.Right, s.Square, s.Triangle, s.Left, s.Down, s.Cross, s.Circle };
         Layer layer = _mapping.Resolve(s.L1, s.R1, _l2Pressed, _r2Pressed, _l1DownMs, _r1DownMs, _l2DownMs, _r2DownMs);
 
         for (int i = 0; i < 8; i++) {
             bool prev = _prevDown[i];
             bool curr = currentDown[i];
             ButtonHold hold = _holds[i];
+            bool touchChargingFn = s.TouchClick && _leftDirection == StickDirection.UpRight;
 
             if (!prev && curr) {
-                // 0 -> 1: KeyDown edge (Buffered)
-        PhysicalKey key = _mapping.Lookup(layer, (ActionButton)i);
-        
-        if (_leftDirection == StickDirection.UpRight) {
-            PhysicalKey fKey = TranslateToFKey(key);
-            if (fKey != PhysicalKey.None) {
-                if (!prev && curr) {
-                    _fnActiveKey = fKey;
+                PhysicalKey key = ApplyFnLayer(_mapping.Lookup(layer, (ActionButton)i));
+                if (IsFunctionKey(key)) {
+                    ActivateFnKey(key, s.TouchClick);
+                    hold.Down = true;
+                    hold.Key = key;
+                    hold.KeyIsDown = false;
+                    hold.SuppressUntilRelease = true;
+                    _holds[i] = hold;
+                    _prevDown[i] = curr;
+                    continue;
                 }
-                _prevDown[i] = curr;
-                continue;
-            }
-        }
                 
                 hold.Down = true;
                 hold.Key = key;
-                hold.KeyIsDown = false; // Do not press immediately
-                
-                if (layer != Layer.Base) {
-                    hold.PressTimeMs = 0.0; // 0ms buffer for letters/numbers
-                } else {
-                    hold.PressTimeMs = now; // 60ms buffer for Base
+                hold.KeyIsDown = false;
+
+                if (key != PhysicalKey.None) {
+                    string source = (i < 2 || i == 4 || i == 5) ? "DPad" : "FaceButton";
+                    string btn = ((ActionButton)i).ToString();
+                    if (source == "DPad") btn = btn == "Up" ? "Up" : btn == "Right" ? "Right" : btn == "Down" ? "Down" : "Left";
+                    _injector.CurrentSource = source;
+                    _injector.CurrentReason = "Button " + btn;
+                    DebugSources("Source=" + source + " Button=" + btn + " Mode=Held -> " + MappingEngine.KeyName(key) + "Down");
+                    _injector.KeyDown(key);
+                    hold.KeyIsDown = true;
                 }
-                
-                hold.LayerChangeSilenceUntilMs = 0; // No silence
                 
                 _holds[i] = hold;
             } else if (prev && !curr) {
                 // 1 -> 0: KeyUp edge
                 if (hold.KeyIsDown) {
-                    string source = (i < 2 || (i >= 4 && i <= 6)) ? "DPad" : "FaceButton";
+                    string source = (i < 2 || i == 4 || i == 5) ? "DPad" : "FaceButton";
                     string btn = ((ActionButton)i).ToString();
                     if (source == "DPad") btn = btn == "Up" ? "Up" : btn == "Right" ? "Right" : btn == "Down" ? "Down" : "Left";
                     DebugSources("Source=" + source + " Button=" + btn + " Mode=Held -> " + MappingEngine.KeyName(hold.Key) + "Up");
@@ -1142,14 +1179,21 @@ internal sealed class MapperForm : Form {
                 }
                 _holds[i] = new ButtonHold();
             } else if (prev && curr) {
-                // 1 -> 1: Typematic Repeat and Layer Transition
-                PhysicalKey currentLayerKey = _mapping.Lookup(layer, (ActionButton)i);
+                if (hold.SuppressUntilRelease) {
+                    PhysicalKey key = ApplyFnLayer(_mapping.Lookup(layer, (ActionButton)i));
+                    if (touchChargingFn && IsFunctionKey(key)) {
+                        AccumulateLeftStickKey(key);
+                    }
+                    _holds[i] = hold;
+                    _prevDown[i] = curr;
+                    continue;
+                }
+
+                PhysicalKey currentLayerKey = ApplyFnLayer(_mapping.Lookup(layer, (ActionButton)i));
                 
                 if (hold.Key != currentLayerKey) {
-                    // Layer changed!
                     if (hold.KeyIsDown) {
-                        // Release old key
-                        string source = (i < 2 || (i >= 4 && i <= 6)) ? "DPad" : "FaceButton";
+                        string source = (i < 2 || i == 4 || i == 5) ? "DPad" : "FaceButton";
                         string btn = ((ActionButton)i).ToString();
                         if (source == "DPad") btn = btn == "Up" ? "Up" : btn == "Right" ? "Right" : btn == "Down" ? "Down" : "Left";
                         _injector.CurrentSource = source;
@@ -1157,56 +1201,29 @@ internal sealed class MapperForm : Form {
                         _injector.KeyUp(hold.Key);
                         
                         hold.KeyIsDown = false;
-                        
-                        // Enter silence period of 100ms only if dropping to Base
-                        if (layer == Layer.Base) {
-                            hold.LayerChangeSilenceUntilMs = now + 100.0;
-                        }
                     }
-                    
-                    if (layer != Layer.Base) {
-                        hold.PressTimeMs = 0.0; // Zero buffer
-                        hold.LayerChangeSilenceUntilMs = 0.0; // Zero silence
+
+                    if (IsFunctionKey(currentLayerKey)) {
+                        ActivateFnKey(currentLayerKey, s.TouchClick);
+                        hold.Key = currentLayerKey;
+                        hold.SuppressUntilRelease = true;
+                        _holds[i] = hold;
+                        _prevDown[i] = curr;
+                        continue;
                     }
-                    
+
+                    if (currentLayerKey != PhysicalKey.None) {
+                        string source = (i < 2 || i == 4 || i == 5) ? "DPad" : "FaceButton";
+                        string btn = ((ActionButton)i).ToString();
+                        if (source == "DPad") btn = btn == "Up" ? "Up" : btn == "Right" ? "Right" : btn == "Down" ? "Down" : "Left";
+                        _injector.CurrentSource = source;
+                        _injector.CurrentReason = "Button " + btn + " layer change press";
+                        _injector.KeyDown(currentLayerKey);
+                        hold.KeyIsDown = true;
+                    }
+
                     hold.Key = currentLayerKey;
                     _holds[i] = hold;
-                } else {
-                    if (!hold.KeyIsDown) {
-                        // We haven't pressed it yet! Check timers.
-                        bool pastBuffer = now >= hold.PressTimeMs + 60.0;
-                        bool pastSilence = now >= hold.LayerChangeSilenceUntilMs;
-                        
-                        if (pastBuffer && pastSilence && hold.Key != PhysicalKey.None) {
-                            // Finally press it!
-                            string source = (i < 2 || (i >= 4 && i <= 6)) ? "DPad" : "FaceButton";
-                            string btn = ((ActionButton)i).ToString();
-                            if (source == "DPad") btn = btn == "Up" ? "Up" : btn == "Right" ? "Right" : btn == "Down" ? "Down" : "Left";
-                            _injector.CurrentSource = source;
-                            _injector.CurrentReason = "Button " + btn;
-
-                            DebugSources("Source=" + source + " Button=" + btn + " Mode=Held -> " + MappingEngine.KeyName(hold.Key) + "Down");
-                            _injector.KeyDown(hold.Key);
-                            
-                            hold.KeyIsDown = true;
-                            hold.NextRepeatMs = now + _config.RepeatDelayMs;
-                            _holds[i] = hold;
-                        }
-                    } else {
-                        // Typematic Repeat
-                        if (hold.Key != PhysicalKey.None && now >= hold.NextRepeatMs) {
-                            string source = (i < 2 || (i >= 4 && i <= 6)) ? "DPad" : "FaceButton";
-                            string btn = ((ActionButton)i).ToString();
-                            if (source == "DPad") btn = btn == "Up" ? "Up" : btn == "Right" ? "Right" : btn == "Down" ? "Down" : "Left";
-                            
-                            _injector.CurrentSource = source;
-                            _injector.CurrentReason = "Button " + btn + " repeat";
-                            
-                            _injector.KeyDown(hold.Key);
-                            hold.NextRepeatMs = now + _config.RepeatIntervalMs;
-                            _holds[i] = hold;
-                        }
-                    }
                 }
             }
 
@@ -1337,6 +1354,9 @@ internal sealed class MapperForm : Form {
         _leftMouseDown = false;
         _rightMouseDown = false;
         _leftDirection = StickDirection.None;
+        _scrollNextMs = 0;
+        _heldLeftStickKeys.Clear();
+        _accumulatedModifiers.Clear();
         for (int i = 0; i < _holds.Length; i++) _holds[i] = new ButtonHold();
     }
 
@@ -1395,9 +1415,7 @@ internal sealed class MapperForm : Form {
         public bool Down;
         public PhysicalKey Key;
         public bool KeyIsDown;
-        public double NextRepeatMs;
-        public double PressTimeMs;
-        public double LayerChangeSilenceUntilMs;
+        public bool SuppressUntilRelease;
     }
 }
 
@@ -1425,45 +1443,161 @@ internal static class Program {
             Console.OutputEncoding = System.Text.Encoding.UTF8;
         } catch { }
 
-        string[] banner = new string[] {
+        int width = 88;
+        try { width = Console.WindowWidth; } catch { }
+        if (width < 64) width = 64;
+        if (width > 160) width = 160;
+
+        string[] logo = new string[] {
             @"   _____ _     _ _    _ _____          _   ",
             @"  / ____| |   (_) |  (_)  __ \        | |  ",
             @" | (___ | |__  _| | ___| |__) |_ _  __| |  ",
             @"  \___ \| '_ \| | |/ / |  ___/ _` |/ _` |  ",
             @"  ____) | | | | |   <| | |  | (_| | (_| |  ",
-            @" |_____/|_| |_|_|_|\_\_|_|   \__,_|\__,_|  ",
-            @"",
-            "        (\u273F\u25E0\u203F\u25E0) Welcome to ShikiPad! (\u273F\u25E0\u203F\u25E0)",
-            @""
+            @" |_____/|_| |_|_|_|\_\_|_|   \__,_|\__,_|  "
         };
-        
-        int[] rStops = new int[] { 0, 0, 255, 255 };
-        int[] gStops = new int[] { 255, 191, 140, 255 };
-        int[] bStops = new int[] { 127, 255, 0, 255 };
-        
-        int maxLength = 0;
-        foreach (string s in banner) if (s.Length > maxLength) maxLength = s.Length;
+        string[] faces = new string[] {
+            "(\u273F\u25E0\u203F\u25E0)", "(\uFF61\u30FB\u03C9\u30FB\uFF61)\uFF89\u2661", "(\u3065\uFF61\u25D5\u203F\u203F\u25D5\uFF61)\u3065",
+            "(\u2267\u25BD\u2266)", "(\u256F\u2727\u25BD\u2727)\u256F", "(\u2229^o^)\u2283\u2501\u2606",
+            "(\u3063\u02D8\u03C9\u02D8\u03C2 )", "(\u2744\u203F\u2744)", "(\u02D8\u035C\u02D8)",
+            "(\u00B4\uFF65\u1D17\uFF65`)", "(\u25D5\u203F\u25D5)", "(\u25E1\u203F\u25E1\u273F)",
+            "(\u2606\u25BD\u2606)", "(\uFF65\u2200\uFF65)", "(\u00B4\u2200`)\u2661"
+        };
 
-        for (int y = 0; y < banner.Length; y++) {
-            string line = banner[y];
-            for (int x = 0; x < line.Length; x++) {
-                double t = (double)(y * maxLength + x) / (banner.Length * maxLength);
-                if (t > 1.0) t = 1.0;
-                
-                double scaled = t * 3.0;
-                int segment = (int)scaled;
-                if (segment >= 3) segment = 2;
-                double localT = scaled - segment;
-                
-                int r = (int)(rStops[segment] + (rStops[segment + 1] - rStops[segment]) * localT);
-                int g = (int)(gStops[segment] + (gStops[segment + 1] - gStops[segment]) * localT);
-                int b = (int)(bStops[segment] + (bStops[segment + 1] - bStops[segment]) * localT);
-                
-                Console.Write(string.Format("\x1b[38;2;{0};{1};{2}m{3}", r, g, b, line[x]));
-            }
-            Console.WriteLine();
+        Rgb[] faceColors = new Rgb[] {
+            new Rgb(255, 111, 145), new Rgb(255, 199, 95), new Rgb(68, 214, 164),
+            new Rgb(82, 190, 255), new Rgb(191, 132, 255), new Rgb(255, 150, 84),
+            new Rgb(118, 235, 255), new Rgb(255, 239, 138), new Rgb(141, 255, 184)
+        };
+        Rgb[] logoStops = new Rgb[] {
+            new Rgb(90, 255, 168), new Rgb(71, 203, 255),
+            new Rgb(255, 182, 73), new Rgb(255, 255, 255)
+        };
+
+        WriteFaceScatterLine(width, faces, faceColors, 1, "  ");
+        WriteMutedCentered(width, "Welcome to");
+        for (int i = 0; i < logo.Length; i++) {
+            WriteGradientCentered(width, logo[i], logoStops);
         }
+        WriteFaceScatterLine(width, faces, faceColors, 5, "   ");
+        WriteMutedCentered(width, "Spring        Summer        Autumn");
+        WriteFaceScatterLine(width, faces, faceColors, 9, " ");
+        WriteMutedCentered(width, "Controller awake. Keyboard and mouse ready.");
+        WriteWinterLine(width, faces, 3);
+        WriteWinterLine(width, faces, 10);
+        WriteWinterLine(width, faces, 6);
+        WriteWhiteSnowLine(width);
         Console.WriteLine("\x1b[0m");
+    }
+
+    private static string CenterLine(int width, string text) {
+        if (text.Length >= width) return text.Substring(0, width);
+        int left = (width - text.Length) / 2;
+        return new string(' ', left) + text + new string(' ', width - left - text.Length);
+    }
+
+    private struct Rgb {
+        public int R;
+        public int G;
+        public int B;
+
+        public Rgb(int r, int g, int b) {
+            R = r;
+            G = g;
+            B = b;
+        }
+    }
+
+    private static void WriteRgb(Rgb color, string text) {
+        Console.Write(string.Format("\x1b[38;2;{0};{1};{2}m{3}", color.R, color.G, color.B, text));
+    }
+
+    private static Rgb Mix(Rgb a, Rgb b, double t) {
+        return new Rgb(
+            (int)(a.R + (b.R - a.R) * t),
+            (int)(a.G + (b.G - a.G) * t),
+            (int)(a.B + (b.B - a.B) * t));
+    }
+
+    private static Rgb GradientAt(Rgb[] stops, double t) {
+        if (t <= 0.0) return stops[0];
+        if (t >= 1.0) return stops[stops.Length - 1];
+        double scaled = t * (stops.Length - 1);
+        int segment = (int)scaled;
+        if (segment >= stops.Length - 1) segment = stops.Length - 2;
+        return Mix(stops[segment], stops[segment + 1], scaled - segment);
+    }
+
+    private static void WriteGradientCentered(int width, string text, Rgb[] stops) {
+        string line = CenterLine(width, text);
+        int start = (width - text.Length) / 2;
+        int end = start + text.Length;
+        for (int i = 0; i < line.Length; i++) {
+            if (i < start || i >= end) {
+                Console.Write(line[i]);
+            } else {
+                double t = text.Length <= 1 ? 1.0 : (double)(i - start) / (double)(text.Length - 1);
+                WriteRgb(GradientAt(stops, t), line[i].ToString());
+            }
+        }
+        Console.WriteLine();
+    }
+
+    private static void WriteMutedCentered(int width, string text) {
+        WriteRgb(new Rgb(198, 218, 225), CenterLine(width, text));
+        Console.WriteLine();
+    }
+
+    private static void WriteFaceScatterLine(int width, string[] faces, Rgb[] colors, int seed, string gap) {
+        int used = 0;
+        int index = seed;
+        Console.Write(new string(' ', seed % 7));
+        used += seed % 7;
+        while (used < width) {
+            string face = faces[index % faces.Length];
+            string pad = new string(' ', ((index * 3) % 5) + gap.Length);
+            if (used + face.Length + pad.Length > width) break;
+            WriteRgb(colors[index % colors.Length], face);
+            WriteRgb(new Rgb(90, 104, 113), pad);
+            used += face.Length + pad.Length;
+            index++;
+        }
+        Console.WriteLine();
+    }
+
+    private static void WriteWinterLine(int width, string[] faces, int seed) {
+        Rgb[] winter = new Rgb[] {
+            new Rgb(255, 255, 255), new Rgb(224, 246, 255),
+            new Rgb(190, 226, 255), new Rgb(238, 242, 255)
+        };
+        int used = 0;
+        int faceIndex = seed % faces.Length;
+        int nextFaceAt = 4 + (seed % 9);
+        while (used < width) {
+            if (used >= nextFaceAt) {
+                string face = faces[faceIndex % faces.Length];
+                if (used + face.Length < width) {
+                    WriteRgb(winter[(faceIndex + seed) % winter.Length], face);
+                    used += face.Length;
+                    faceIndex += 5;
+                    nextFaceAt = used + 11 + (faceIndex % 8);
+                    continue;
+                }
+            }
+
+            string chunk = ((used + seed) % 6 == 0) ? "*" : (((used + seed) % 4 == 0) ? "." : " ");
+            WriteRgb(winter[(used + seed) % winter.Length], chunk);
+            used += chunk.Length;
+        }
+        Console.WriteLine();
+    }
+
+    private static void WriteWhiteSnowLine(int width) {
+        for (int i = 0; i < width; i++) {
+            Rgb color = (i % 3 == 0) ? new Rgb(255, 255, 255) : new Rgb(232, 248, 255);
+            WriteRgb(color, i % 5 == 0 ? "*" : "_");
+        }
+        Console.WriteLine();
     }
 
     private static InputInjector _exitInjector;
@@ -1653,7 +1787,7 @@ internal static class Program {
     private static void PrintLayerTest() {
         MappingEngine m = new MappingEngine();
         Layer[] layers = new Layer[] { Layer.Base, Layer.L1, Layer.R1, Layer.L2, Layer.R2, Layer.R1R2, Layer.L1L2 };
-        Console.WriteLine("Action button order: Up, Right, Square, Triangle, Down, Cross, Left, Circle");
+        Console.WriteLine("Action button order: Up, Right, Square, Triangle, Left, Down, Cross, Circle");
         Console.WriteLine();
         for (int l = 0; l < layers.Length; l++) {
             Console.WriteLine(LayerDisplayName(layers[l]) + ":");
@@ -1663,16 +1797,16 @@ internal static class Program {
             }
             Console.WriteLine();
         }
-        Console.WriteLine("Reserved combinations output nothing: L1+L2, R1+R2, L1+R2, R1+L2, Any unsupported combination");
+        Console.WriteLine("Reserved combinations output nothing: L1+R1, L2+R2, L1+R2, R1+L2, Any unsupported combination");
         Console.WriteLine();
         Console.WriteLine("Resolution checks:");
-        PrintResolutionCheck(m, "L1+R1 + Square", true, true, false, false, ActionButton.Square);
-        PrintResolutionCheck(m, "L1+R1 + Triangle", true, true, false, false, ActionButton.Triangle);
-        PrintResolutionCheck(m, "L1+R1 + Down", true, true, false, false, ActionButton.Down);
-        PrintResolutionCheck(m, "L2+R2 + Up", false, false, true, true, ActionButton.Up);
-        PrintResolutionCheck(m, "L2+R2 + Square", false, false, true, true, ActionButton.Square);
-        PrintResolutionCheck(m, "L1+L2 + Square", true, false, true, false, ActionButton.Square);
         PrintResolutionCheck(m, "R1+R2 + Square", false, true, false, true, ActionButton.Square);
+        PrintResolutionCheck(m, "R1+R2 + Triangle", false, true, false, true, ActionButton.Triangle);
+        PrintResolutionCheck(m, "R1+R2 + Left", false, true, false, true, ActionButton.Left);
+        PrintResolutionCheck(m, "L1+L2 + Up", true, false, true, false, ActionButton.Up);
+        PrintResolutionCheck(m, "L1+L2 + Square", true, false, true, false, ActionButton.Square);
+        PrintResolutionCheck(m, "L1+R1 + Square", true, true, false, false, ActionButton.Square);
+        PrintResolutionCheck(m, "L2+R2 + Square", false, false, true, true, ActionButton.Square);
     }
 
     private static void PrintResolutionCheck(MappingEngine mapping, string label, bool l1, bool r1, bool l2, bool r2, ActionButton action) {
@@ -1734,13 +1868,13 @@ internal static class Program {
     private static string LeftStickActionName(StickDirection direction) {
         switch (direction) {
             case StickDirection.Up: return "WheelUp only";
-            case StickDirection.UpRight: return "Escape once only";
+            case StickDirection.UpRight: return "Fn only";
             case StickDirection.Right: return "Win only";
             case StickDirection.DownRight: return "Alt only";
             case StickDirection.Down: return "WheelDown only";
             case StickDirection.DownLeft: return "Ctrl only";
-            case StickDirection.Left: return "Ctrl+Shift only";
-            case StickDirection.UpLeft: return "Shift only";
+            case StickDirection.Left: return "Shift only";
+            case StickDirection.UpLeft: return "Esc only";
             default: return "None";
         }
     }
@@ -1760,8 +1894,8 @@ internal static class Program {
     }
 
     private static string LayerDisplayName(Layer layer) {
-        if (layer == Layer.R1R2) return "L1+R1";
-        if (layer == Layer.L1L2) return "L2+R2";
+        if (layer == Layer.R1R2) return "R1+R2";
+        if (layer == Layer.L1L2) return "L1+L2";
         return layer.ToString();
     }
 

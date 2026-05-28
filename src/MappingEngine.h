@@ -55,9 +55,9 @@ enum class ActionButton : std::uint8_t {
     Right = 1,
     Square = 2,
     Triangle = 3,
-    Down = 4,
-    Cross = 5,
-    Left = 6,
+    Left = 4,
+    Down = 5,
+    Cross = 6,
     Circle = 7,
 
     COUNT = 8

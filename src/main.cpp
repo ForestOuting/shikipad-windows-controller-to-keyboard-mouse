@@ -123,10 +123,6 @@ ActiveModifiers modifiersFor(StickDirection direction) {
             mods.ctrl = true;
             break;
         case StickDirection::Left:
-            mods.ctrl = true;
-            mods.shift = true;
-            break;
-        case StickDirection::UpLeft:
             mods.shift = true;
             break;
         default:
@@ -142,9 +138,9 @@ ActionButton actionForButton(SDL_GamepadButton button, bool& isAction) {
         case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return ActionButton::Right;
         case SDL_GAMEPAD_BUTTON_WEST: return ActionButton::Square;
         case SDL_GAMEPAD_BUTTON_NORTH: return ActionButton::Triangle;
+        case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return ActionButton::Left;
         case SDL_GAMEPAD_BUTTON_DPAD_DOWN: return ActionButton::Down;
         case SDL_GAMEPAD_BUTTON_SOUTH: return ActionButton::Cross;
-        case SDL_GAMEPAD_BUTTON_DPAD_LEFT: return ActionButton::Left;
         case SDL_GAMEPAD_BUTTON_EAST: return ActionButton::Circle;
         default:
             isAction = false;
@@ -413,7 +409,7 @@ private:
             m_leftDirection = next;
             updateHeldModifierDirection(m_leftDirection);
             m_scrollNextMs = 0.0;
-            if (m_leftDirection == StickDirection::UpRight) {
+            if (m_leftDirection == StickDirection::UpLeft) {
                 m_injector.keyTap(PhysicalKey::Escape);
             }
         }
@@ -538,8 +534,7 @@ private:
         return direction == StickDirection::Right ||
                direction == StickDirection::DownRight ||
                direction == StickDirection::DownLeft ||
-               direction == StickDirection::Left ||
-               direction == StickDirection::UpLeft;
+               direction == StickDirection::Left;
     }
 
     void updateActionButtons() {
@@ -859,9 +854,9 @@ private:
         SDL_GAMEPAD_BUTTON_DPAD_RIGHT,
         SDL_GAMEPAD_BUTTON_WEST,
         SDL_GAMEPAD_BUTTON_NORTH,
+        SDL_GAMEPAD_BUTTON_DPAD_LEFT,
         SDL_GAMEPAD_BUTTON_DPAD_DOWN,
         SDL_GAMEPAD_BUTTON_SOUTH,
-        SDL_GAMEPAD_BUTTON_DPAD_LEFT,
         SDL_GAMEPAD_BUTTON_EAST,
     };
     std::array<ButtonHold, 8> m_holds{};
@@ -953,7 +948,7 @@ void printLayerTest() {
         }
     }
 
-    std::printf("\nReserved combinations: L1+L2, R1+R2, L1+R2, R1+L2, and unsupported combos output None.\n");
+    std::printf("\nReserved combinations: L1+R1, L2+R2, L1+R2, R1+L2, and unsupported combos output None.\n");
     const auto printResolutionCheck = [&](const char* label, bool l1, bool r1, bool l2, bool r2, ActionButton action) {
         const Layer layer = mapping.resolveLayer(l1, r1, l2, r2);
         const PhysicalKey key = mapping.lookupKey(layer, action);
@@ -962,13 +957,13 @@ void printLayerTest() {
     };
 
     std::printf("\nResolution checks\n");
-    printResolutionCheck("L1+R1 + Square", true, true, false, false, ActionButton::Square);
-    printResolutionCheck("L1+R1 + Triangle", true, true, false, false, ActionButton::Triangle);
-    printResolutionCheck("L1+R1 + Down", true, true, false, false, ActionButton::Down);
-    printResolutionCheck("L2+R2 + Up", false, false, true, true, ActionButton::Up);
-    printResolutionCheck("L2+R2 + Square", false, false, true, true, ActionButton::Square);
-    printResolutionCheck("L1+L2 + Square", true, false, true, false, ActionButton::Square);
     printResolutionCheck("R1+R2 + Square", false, true, false, true, ActionButton::Square);
+    printResolutionCheck("R1+R2 + Triangle", false, true, false, true, ActionButton::Triangle);
+    printResolutionCheck("R1+R2 + Left", false, true, false, true, ActionButton::Left);
+    printResolutionCheck("L1+L2 + Up", true, false, true, false, ActionButton::Up);
+    printResolutionCheck("L1+L2 + Square", true, false, true, false, ActionButton::Square);
+    printResolutionCheck("L1+R1 + Square", true, true, false, false, ActionButton::Square);
+    printResolutionCheck("L2+R2 + Square", false, false, true, true, ActionButton::Square);
     LOG_INFO("Layer-test complete");
 }
 

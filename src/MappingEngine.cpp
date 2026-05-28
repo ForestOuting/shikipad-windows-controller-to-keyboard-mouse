@@ -9,45 +9,45 @@ void MappingEngine::initMappingTables() {
 
     m_tables[static_cast<int>(Layer::Base)] = {{
         PK::ArrowUp, PK::ArrowRight, PK::Space, PK::Backspace,
-        PK::ArrowDown, PK::Enter, PK::ArrowLeft, PK::Tab
+        PK::ArrowLeft, PK::ArrowDown, PK::Enter, PK::Tab
     }};
 
     m_tables[static_cast<int>(Layer::L1)] = {{
-        PK::I, PK::N, PK::A, PK::E,
-        PK::O, PK::H, PK::U, PK::G
+        PK::S, PK::R, PK::D, PK::G,
+        PK::L, PK::C, PK::Y, PK::Z
     }};
 
     m_tables[static_cast<int>(Layer::R1)] = {{
-        PK::T, PK::S, PK::D, PK::R,
-        PK::Y, PK::C, PK::L, PK::Z
+        PK::I, PK::N, PK::E, PK::A,
+        PK::O, PK::T, PK::H, PK::U
     }};
 
     m_tables[static_cast<int>(Layer::L2)] = {{
-        PK::M, PK::W, PK::J, PK::X,
-        PK::Q, PK::F, PK::P, PK::B
-    }};
-
-    m_tables[static_cast<int>(Layer::R2)] = {{
         PK::K, PK::V, PK::Num1, PK::Num2,
         PK::Num3, PK::Num4, PK::Num5, PK::Num6
     }};
 
+    m_tables[static_cast<int>(Layer::R2)] = {{
+        PK::M, PK::W, PK::J, PK::X,
+        PK::Q, PK::F, PK::P, PK::B
+    }};
+
     m_tables[static_cast<int>(Layer::L1R1)] = {{
         PK::Num7, PK::Num8, PK::Num9, PK::Num0,
-        PK::Comma, PK::Period, PK::Minus, PK::Equals
+        PK::Minus, PK::Equals, PK::Comma, PK::Period
     }};
 
     m_tables[static_cast<int>(Layer::L2R2)] = {{
-        PK::Slash, PK::Semicolon, PK::Apostrophe, PK::LeftBracket,
+        PK::Apostrophe, PK::Slash, PK::Semicolon, PK::LeftBracket,
         PK::RightBracket, PK::Backslash, PK::Grave, PK::None
     }};
 }
 
 Layer MappingEngine::resolveLayer(bool l1, bool r1, bool l2, bool r2) const {
-    if (l1 && r1 && !l2 && !r2) {
+    if (r1 && r2 && !l1 && !l2) {
         return Layer::L1R1;
     }
-    if (l2 && r2 && !l1 && !r1) {
+    if (l1 && l2 && !r1 && !r2) {
         return Layer::L2R2;
     }
 
@@ -170,8 +170,8 @@ const char* MappingEngine::layerName(Layer layer) {
         case Layer::R1: return "R1";
         case Layer::L2: return "L2";
         case Layer::R2: return "R2";
-        case Layer::L1R1: return "L1+R1";
-        case Layer::L2R2: return "L2+R2";
+        case Layer::L1R1: return "R1+R2";
+        case Layer::L2R2: return "L1+L2";
         case Layer::Reserved: return "Reserved";
         default: return "Unknown";
     }
