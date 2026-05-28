@@ -476,12 +476,12 @@ internal sealed class InputInjector {
         Add(PhysicalKey.F12, 0x7B, false);
         Add(PhysicalKey.LWin, 0x5B, true);
         Add(PhysicalKey.RWin, 0x5C, true);
-        Add(PhysicalKey.LAlt, 0x38, false);
-        Add(PhysicalKey.LCtrl, 0x1D, false);
-        Add(PhysicalKey.LShift, 0x2A, false);
-        Add(PhysicalKey.RAlt, 0x38, true);
-        Add(PhysicalKey.RCtrl, 0x1D, true);
-        Add(PhysicalKey.RShift, 0x36, false);
+        Add(PhysicalKey.LAlt, 0xA4, false);
+        Add(PhysicalKey.LCtrl, 0xA2, false);
+        Add(PhysicalKey.LShift, 0xA0, false);
+        Add(PhysicalKey.RAlt, 0xA5, true);
+        Add(PhysicalKey.RCtrl, 0xA3, true);
+        Add(PhysicalKey.RShift, 0xA1, false);
     }
 
     private void Add(PhysicalKey key, ushort vk, bool extended) {
@@ -997,8 +997,9 @@ internal sealed class MapperForm : Form {
         StickDirection next = previous;
 
         if (previous == StickDirection.None) {
-            if (radius < _config.LeftStickEnterDeadzone) return;
-            next = Sector(s.LX, s.LY);
+            if (radius >= _config.LeftStickEnterDeadzone) {
+                next = Sector(s.LX, s.LY);
+            }
         } else if (radius < _config.LeftStickExitDeadzone) {
             next = StickDirection.None;
         } else {
@@ -1103,8 +1104,7 @@ internal sealed class MapperForm : Form {
                 // 0 -> 1: KeyDown edge (Buffered)
         PhysicalKey key = _mapping.Lookup(layer, (ActionButton)i);
         
-        StickDirection leftDir = Sector(s.LX, s.LY);
-        if (leftDir == StickDirection.UpRight) {
+        if (_leftDirection == StickDirection.UpRight) {
             PhysicalKey fKey = TranslateToFKey(key);
             if (fKey != PhysicalKey.None) {
                 if (!prev && curr) {
