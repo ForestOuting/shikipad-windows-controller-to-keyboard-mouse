@@ -1,0 +1,10 @@
+*.py
+shikipad.json
+.vs/
+obj/
+bin/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.log
