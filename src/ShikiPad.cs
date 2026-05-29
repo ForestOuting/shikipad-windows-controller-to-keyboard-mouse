@@ -98,8 +98,7 @@ internal sealed class Config {
                                             !text.Contains("\"rightStickCurveExponent\"") ||
                                             !text.Contains("\"rightStickEpsilon\"") ||
                                             !text.Contains("\"leftStickEnterDeadzone\"") ||
-                                            !text.Contains("\"leftStickExitDeadzone\"") ||
-                                            !text.Contains("\"controllerBackend\"");
+                                            !text.Contains("\"leftStickExitDeadzone\"");
             bool shouldSaveLeftStickConfig = false;
             cfg.Enabled = GetBool(text, "enabled", cfg.Enabled);
             cfg.MouseSensitivity = GetDouble(text, "mouseSensitivity", cfg.MouseSensitivity);
