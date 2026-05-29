@@ -1176,10 +1176,13 @@ internal sealed class MapperForm : Form {
                 }
 
                 bool releasedPending = hold.PendingReleased || !curr;
-                if (IsFunctionKey(layerKey)) {
-                    ActivateFnKey(layerKey, s.TouchClick);
+                Layer resolvedLayer = IsComboLayer(hold.PendingLayer) ? hold.PendingLayer : layer;
+                PhysicalKey resolvedLayerKey = ApplyFnLayer(_mapping.Lookup(resolvedLayer, (ActionButton)i));
+                if (IsFunctionKey(resolvedLayerKey)) {
+                    ActivateFnKey(resolvedLayerKey, s.TouchClick);
                     if (!releasedPending) {
-                        hold.Key = layerKey;
+                        hold.Key = resolvedLayerKey;
+                        hold.KeyLayer = resolvedLayer;
                         hold.KeyIsDown = false;
                         hold.SuppressUntilRelease = true;
                         hold.Pending = false;
@@ -1190,12 +1193,12 @@ internal sealed class MapperForm : Form {
                     }
                     _prevDown[i] = curr;
                     continue;
-                } else if (layerKey != PhysicalKey.None) {
+                } else if (resolvedLayerKey != PhysicalKey.None) {
                     if (releasedPending) {
                         hold.Pending = false;
                         hold.PendingReleased = false;
-                        PressActionKey(i, layerKey, "Button " + ActionButtonName(i), ref hold, layer, false, now);
-                        ReleaseActionKey(i, layerKey, "Button " + ActionButtonName(i) + " release after layer settle");
+                        PressActionKey(i, resolvedLayerKey, "Button " + ActionButtonName(i), ref hold, resolvedLayer, false, now);
+                        ReleaseActionKey(i, resolvedLayerKey, "Button " + ActionButtonName(i) + " release after layer settle");
                         _holds[i] = new ButtonHold();
                         _prevDown[i] = curr;
                         continue;
@@ -1203,7 +1206,7 @@ internal sealed class MapperForm : Form {
 
                     hold.Pending = false;
                     hold.PendingReleased = false;
-                    PressActionKey(i, layerKey, "Button " + ActionButtonName(i), ref hold, layer, layer == Layer.Base, now);
+                    PressActionKey(i, resolvedLayerKey, "Button " + ActionButtonName(i), ref hold, resolvedLayer, resolvedLayer == Layer.Base, now);
                     _holds[i] = hold;
                     _prevDown[i] = curr;
                     continue;
@@ -1220,6 +1223,7 @@ internal sealed class MapperForm : Form {
                     hold = new ButtonHold();
                     hold.Down = true;
                     hold.Pending = true;
+                    hold.PendingLayer = layer;
                     hold.PendingSinceMs = now;
                     _holds[i] = hold;
                     _prevDown[i] = curr;
@@ -1313,9 +1317,14 @@ internal sealed class MapperForm : Form {
 
     private bool ShouldSuppressLayerChangeDuringCharacterTap(ButtonHold hold, Layer newLayer, double now) {
         if (hold.KeyLayer == Layer.Base) return false;
+        if (IsComboLayer(hold.KeyLayer) && hold.KeyLayer != newLayer) return true;
         if (newLayer == Layer.Base) return true;
         if (hold.KeyLayer == newLayer) return false;
         return now - hold.KeyDownMs <= _config.ActionLayerSwitchGuardMs;
+    }
+
+    private static bool IsComboLayer(Layer layer) {
+        return layer == Layer.R1R2 || layer == Layer.L1L2;
     }
 
     private void PressActionKey(int index, PhysicalKey key, string reason, ref ButtonHold hold, Layer keyLayer, bool repeatable, double now) {
@@ -1570,6 +1579,7 @@ internal sealed class MapperForm : Form {
         public bool KeyIsDown;
         public bool SuppressUntilRelease;
         public bool Pending;
+        public Layer PendingLayer;
         public bool PendingReleased;
         public double PendingSinceMs;
         public double KeyDownMs;
