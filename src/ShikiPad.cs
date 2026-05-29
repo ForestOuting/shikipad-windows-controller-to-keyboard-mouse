@@ -1167,16 +1167,23 @@ internal sealed class MapperForm : Form {
             PhysicalKey layerKey = ApplyFnLayer(_mapping.Lookup(layer, (ActionButton)i));
 
             if (hold.Pending) {
+                if (!curr && !hold.PendingReleased) {
+                    hold.PendingReleased = true;
+                    hold.PendingReleasedMs = now;
+                }
+                if (ShouldCapturePendingLayer(hold, curr, now)) {
+                    UpdatePendingLayer(ref hold, layer);
+                }
+
                 bool shouldFlushPending = now - hold.PendingSinceMs >= _config.ActionLayerGraceMs;
                 if (!shouldFlushPending) {
-                    if (!curr) hold.PendingReleased = true;
                     _holds[i] = hold;
                     _prevDown[i] = curr;
                     continue;
                 }
 
                 bool releasedPending = hold.PendingReleased || !curr;
-                Layer resolvedLayer = IsComboLayer(hold.PendingLayer) ? hold.PendingLayer : layer;
+                Layer resolvedLayer = hold.PendingLayer != Layer.Base && hold.PendingLayer != Layer.Reserved ? hold.PendingLayer : layer;
                 PhysicalKey resolvedLayerKey = ApplyFnLayer(_mapping.Lookup(resolvedLayer, (ActionButton)i));
                 if (IsFunctionKey(resolvedLayerKey)) {
                     ActivateFnKey(resolvedLayerKey, s.TouchClick);
@@ -1194,6 +1201,22 @@ internal sealed class MapperForm : Form {
                     _prevDown[i] = curr;
                     continue;
                 } else if (resolvedLayerKey != PhysicalKey.None) {
+                    if (resolvedLayer != Layer.Base) {
+                        TapActionKey(i, resolvedLayerKey, "Button " + ActionButtonName(i) + " virtual tap", resolvedLayer);
+                        if (!releasedPending) {
+                            hold.Pending = false;
+                            hold.PendingReleased = false;
+                            hold.Key = resolvedLayerKey;
+                            hold.KeyLayer = resolvedLayer;
+                            hold.SuppressUntilRelease = true;
+                            _holds[i] = hold;
+                        } else {
+                            _holds[i] = new ButtonHold();
+                        }
+                        _prevDown[i] = curr;
+                        continue;
+                    }
+
                     if (releasedPending) {
                         hold.Pending = false;
                         hold.PendingReleased = false;
@@ -1270,6 +1293,19 @@ internal sealed class MapperForm : Form {
                 PhysicalKey currentLayerKey = layerKey;
                 
                 if (hold.Key != currentLayerKey) {
+                    if (hold.KeyLayer == Layer.Base && layer != Layer.Base) {
+                        if (hold.KeyIsDown) {
+                            ReleaseActionKey(i, hold.Key, "Button " + ActionButtonName(i) + " base release before layer change");
+                        }
+                        hold.Key = PhysicalKey.None;
+                        hold.KeyIsDown = false;
+                        hold.RepeatEnabled = false;
+                        hold.SuppressUntilRelease = true;
+                        _holds[i] = hold;
+                        _prevDown[i] = curr;
+                        continue;
+                    }
+
                     if (hold.KeyIsDown && ShouldSuppressLayerChangeDuringCharacterTap(hold, layer, now)) {
                         ReleaseActionKey(i, hold.Key, "Button " + ActionButtonName(i) + " layer change suppress tap residue");
                         hold.Key = PhysicalKey.None;
@@ -1289,6 +1325,19 @@ internal sealed class MapperForm : Form {
                     if (IsFunctionKey(currentLayerKey)) {
                         ActivateFnKey(currentLayerKey, s.TouchClick);
                         hold.Key = currentLayerKey;
+                        hold.KeyLayer = layer;
+                        hold.SuppressUntilRelease = true;
+                        _holds[i] = hold;
+                        _prevDown[i] = curr;
+                        continue;
+                    }
+
+                    if (layer != Layer.Base && currentLayerKey != PhysicalKey.None) {
+                        TapActionKey(i, currentLayerKey, "Button " + ActionButtonName(i) + " layer change virtual tap", layer);
+                        hold.Key = currentLayerKey;
+                        hold.KeyLayer = layer;
+                        hold.KeyIsDown = false;
+                        hold.RepeatEnabled = false;
                         hold.SuppressUntilRelease = true;
                         _holds[i] = hold;
                         _prevDown[i] = curr;
@@ -1313,6 +1362,17 @@ internal sealed class MapperForm : Form {
 
     private bool ShouldDeferInitialAction(Layer layer) {
         return _config.ActionLayerGraceMs > 0;
+    }
+
+    private bool ShouldCapturePendingLayer(ButtonHold hold, bool currentDown, double now) {
+        if (currentDown || !hold.PendingReleased) return true;
+        return now - hold.PendingReleasedMs <= 30.0;
+    }
+
+    private void UpdatePendingLayer(ref ButtonHold hold, Layer layer) {
+        if (layer == Layer.Base || layer == Layer.Reserved) return;
+        if (IsComboLayer(hold.PendingLayer) && !IsComboLayer(layer)) return;
+        hold.PendingLayer = layer;
     }
 
     private bool ShouldSuppressLayerChangeDuringCharacterTap(ButtonHold hold, Layer newLayer, double now) {
@@ -1341,6 +1401,17 @@ internal sealed class MapperForm : Form {
         hold.KeyDownMs = now;
         hold.RepeatStartedMs = now;
         hold.NextRepeatMs = now + Math.Max(1, _config.RepeatDelayMs);
+    }
+
+    private void TapActionKey(int index, PhysicalKey key, string reason, Layer keyLayer) {
+        string source = ActionSource(index);
+        string btn = ActionButtonName(index);
+        _injector.CurrentSource = source;
+        _injector.CurrentReason = reason;
+        DebugSources("Source=" + source + " Button=" + btn + " Mode=Tap -> " + MappingEngine.KeyName(key));
+        _injector.KeyDown(key);
+        _injector.CurrentReason = reason + " release";
+        _injector.KeyUp(key);
     }
 
     private void ReleaseActionKey(int index, PhysicalKey key, string reason) {
@@ -1582,6 +1653,7 @@ internal sealed class MapperForm : Form {
         public Layer PendingLayer;
         public bool PendingReleased;
         public double PendingSinceMs;
+        public double PendingReleasedMs;
         public double KeyDownMs;
         public bool RepeatEnabled;
         public double RepeatStartedMs;
