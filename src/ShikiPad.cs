@@ -73,6 +73,10 @@ internal sealed class Config {
     public int TouchpadMaxSwipeMs = 600;
     public int RepeatDelayMs = 180;
     public int RepeatIntervalMs = 20;
+    public int BaseRepeatSlowIntervalMs = 160;
+    public int BaseRepeatRampMs = 1200;
+    public int ActionLayerGraceMs = 80;
+    public int ActionLayerSwitchGuardMs = 120;
     public bool UseScanCode = true;
     public int ScrollSlowIntervalMs = 100;
     public int ScrollFastIntervalMs = 20;
@@ -112,6 +116,10 @@ internal sealed class Config {
             cfg.TouchpadMaxSwipeMs = GetInt(text, "touchpadMaxSwipeMs", cfg.TouchpadMaxSwipeMs);
             cfg.RepeatDelayMs = GetInt(text, "repeatDelayMs", cfg.RepeatDelayMs);
             cfg.RepeatIntervalMs = GetInt(text, "repeatIntervalMs", cfg.RepeatIntervalMs);
+            cfg.BaseRepeatSlowIntervalMs = GetInt(text, "baseRepeatSlowIntervalMs", cfg.BaseRepeatSlowIntervalMs);
+            cfg.BaseRepeatRampMs = GetInt(text, "baseRepeatRampMs", cfg.BaseRepeatRampMs);
+            cfg.ActionLayerGraceMs = GetInt(text, "actionLayerGraceMs", cfg.ActionLayerGraceMs);
+            cfg.ActionLayerSwitchGuardMs = GetInt(text, "actionLayerSwitchGuardMs", cfg.ActionLayerSwitchGuardMs);
             cfg.UseScanCode = GetBool(text, "useScanCode", cfg.UseScanCode);
             cfg.ScrollSlowIntervalMs = GetInt(text, "scrollSlowIntervalMs", cfg.ScrollSlowIntervalMs);
             cfg.ScrollFastIntervalMs = GetInt(text, "scrollFastIntervalMs", cfg.ScrollFastIntervalMs);
@@ -135,6 +143,12 @@ internal sealed class Config {
             if (cfg.RightStickEpsilon <= 0.0 || cfg.RightStickEpsilon > 0.01 || Double.IsNaN(cfg.RightStickEpsilon) || Double.IsInfinity(cfg.RightStickEpsilon)) {
                 Logger.Warn("invalid rightStickEpsilon; using 0.002");
                 cfg.RightStickEpsilon = 0.002;
+                shouldSaveMigratedConfig = true;
+            }
+            if (!text.Contains("\"baseRepeatSlowIntervalMs\"") ||
+                !text.Contains("\"baseRepeatRampMs\"") ||
+                !text.Contains("\"actionLayerGraceMs\"") ||
+                !text.Contains("\"actionLayerSwitchGuardMs\"")) {
                 shouldSaveMigratedConfig = true;
             }
             if (Math.Abs(cfg.LeftStickEnterDeadzone - 0.30) < 0.000001) {
@@ -173,6 +187,10 @@ internal sealed class Config {
         Write(sb, "touchpadMaxSwipeMs", TouchpadMaxSwipeMs, true);
         Write(sb, "repeatDelayMs", RepeatDelayMs, true);
         Write(sb, "repeatIntervalMs", RepeatIntervalMs, true);
+        Write(sb, "baseRepeatSlowIntervalMs", BaseRepeatSlowIntervalMs, true);
+        Write(sb, "baseRepeatRampMs", BaseRepeatRampMs, true);
+        Write(sb, "actionLayerGraceMs", ActionLayerGraceMs, true);
+        Write(sb, "actionLayerSwitchGuardMs", ActionLayerSwitchGuardMs, true);
         Write(sb, "useScanCode", UseScanCode, true);
         Write(sb, "scrollSlowIntervalMs", ScrollSlowIntervalMs, true);
         Write(sb, "scrollFastIntervalMs", ScrollFastIntervalMs, true);
@@ -264,14 +282,29 @@ internal sealed class MappingEngine {
     }
 
     public Layer Resolve(bool l1, bool r1, bool l2, bool r2, double l1Ms, double r1Ms, double l2Ms, double r2Ms) {
-        if (r1 && r2 && !l1 && !l2) return Layer.R1R2;
-        if (l1 && l2 && !r1 && !r2) return Layer.L1L2;
-        if (l1 && !r1 && !l2 && !r2) return Layer.L1;
-        if (r1 && !l1 && !l2 && !r2) return Layer.R1;
-        if (l2 && !l1 && !r1 && !r2) return Layer.L2;
-        if (r2 && !l1 && !r1 && !l2) return Layer.R2;
         if (!l1 && !r1 && !l2 && !r2) return Layer.Base;
-        return Layer.Reserved;
+
+        Layer layer = Layer.Reserved;
+        double bestMs = double.NegativeInfinity;
+        int bestRank = 0;
+
+        ConsiderLayer(l1, Layer.L1, l1Ms, 1, ref layer, ref bestMs, ref bestRank);
+        ConsiderLayer(r1, Layer.R1, r1Ms, 1, ref layer, ref bestMs, ref bestRank);
+        ConsiderLayer(l2, Layer.L2, l2Ms, 1, ref layer, ref bestMs, ref bestRank);
+        ConsiderLayer(r2, Layer.R2, r2Ms, 1, ref layer, ref bestMs, ref bestRank);
+        ConsiderLayer(r1 && r2, Layer.R1R2, Math.Max(r1Ms, r2Ms), 2, ref layer, ref bestMs, ref bestRank);
+        ConsiderLayer(l1 && l2, Layer.L1L2, Math.Max(l1Ms, l2Ms), 2, ref layer, ref bestMs, ref bestRank);
+
+        return layer;
+    }
+
+    private static void ConsiderLayer(bool active, Layer candidate, double timestampMs, int rank, ref Layer layer, ref double bestMs, ref int bestRank) {
+        if (!active) return;
+        if (timestampMs > bestMs || (timestampMs == bestMs && rank >= bestRank)) {
+            layer = candidate;
+            bestMs = timestampMs;
+            bestRank = rank;
+        }
     }
 
     public PhysicalKey Lookup(Layer layer, ActionButton action) {
@@ -1131,9 +1164,68 @@ internal sealed class MapperForm : Form {
             bool curr = currentDown[i];
             ButtonHold hold = _holds[i];
             bool touchChargingFn = s.TouchClick && _leftDirection == StickDirection.UpRight;
+            PhysicalKey layerKey = ApplyFnLayer(_mapping.Lookup(layer, (ActionButton)i));
+
+            if (hold.Pending) {
+                bool shouldFlushPending = now - hold.PendingSinceMs >= _config.ActionLayerGraceMs;
+                if (!shouldFlushPending) {
+                    if (!curr) hold.PendingReleased = true;
+                    _holds[i] = hold;
+                    _prevDown[i] = curr;
+                    continue;
+                }
+
+                bool releasedPending = hold.PendingReleased || !curr;
+                if (IsFunctionKey(layerKey)) {
+                    ActivateFnKey(layerKey, s.TouchClick);
+                    if (!releasedPending) {
+                        hold.Key = layerKey;
+                        hold.KeyIsDown = false;
+                        hold.SuppressUntilRelease = true;
+                        hold.Pending = false;
+                        hold.PendingReleased = false;
+                        _holds[i] = hold;
+                    } else {
+                        _holds[i] = new ButtonHold();
+                    }
+                    _prevDown[i] = curr;
+                    continue;
+                } else if (layerKey != PhysicalKey.None) {
+                    if (releasedPending) {
+                        hold.Pending = false;
+                        hold.PendingReleased = false;
+                        PressActionKey(i, layerKey, "Button " + ActionButtonName(i), ref hold, layer, false, now);
+                        ReleaseActionKey(i, layerKey, "Button " + ActionButtonName(i) + " release after layer settle");
+                        _holds[i] = new ButtonHold();
+                        _prevDown[i] = curr;
+                        continue;
+                    }
+
+                    hold.Pending = false;
+                    hold.PendingReleased = false;
+                    PressActionKey(i, layerKey, "Button " + ActionButtonName(i), ref hold, layer, layer == Layer.Base, now);
+                    _holds[i] = hold;
+                    _prevDown[i] = curr;
+                    continue;
+                }
+
+                _holds[i] = new ButtonHold();
+                _prevDown[i] = curr;
+                continue;
+            }
 
             if (!prev && curr) {
-                PhysicalKey key = ApplyFnLayer(_mapping.Lookup(layer, (ActionButton)i));
+                PhysicalKey key = layerKey;
+                if (ShouldDeferInitialAction(layer)) {
+                    hold = new ButtonHold();
+                    hold.Down = true;
+                    hold.Pending = true;
+                    hold.PendingSinceMs = now;
+                    _holds[i] = hold;
+                    _prevDown[i] = curr;
+                    continue;
+                }
+
                 if (IsFunctionKey(key)) {
                     ActivateFnKey(key, s.TouchClick);
                     hold.Down = true;
@@ -1150,33 +1242,19 @@ internal sealed class MapperForm : Form {
                 hold.KeyIsDown = false;
 
                 if (key != PhysicalKey.None) {
-                    string source = (i < 2 || i == 4 || i == 5) ? "DPad" : "FaceButton";
-                    string btn = ((ActionButton)i).ToString();
-                    if (source == "DPad") btn = btn == "Up" ? "Up" : btn == "Right" ? "Right" : btn == "Down" ? "Down" : "Left";
-                    _injector.CurrentSource = source;
-                    _injector.CurrentReason = "Button " + btn;
-                    DebugSources("Source=" + source + " Button=" + btn + " Mode=Held -> " + MappingEngine.KeyName(key) + "Down");
-                    _injector.KeyDown(key);
-                    hold.KeyIsDown = true;
+                    PressActionKey(i, key, "Button " + ActionButtonName(i), ref hold, layer, layer == Layer.Base, now);
                 }
                 
                 _holds[i] = hold;
             } else if (prev && !curr) {
                 // 1 -> 0: KeyUp edge
                 if (hold.KeyIsDown) {
-                    string source = (i < 2 || i == 4 || i == 5) ? "DPad" : "FaceButton";
-                    string btn = ((ActionButton)i).ToString();
-                    if (source == "DPad") btn = btn == "Up" ? "Up" : btn == "Right" ? "Right" : btn == "Down" ? "Down" : "Left";
-                    DebugSources("Source=" + source + " Button=" + btn + " Mode=Held -> " + MappingEngine.KeyName(hold.Key) + "Up");
-
-                    _injector.CurrentSource = source;
-                    _injector.CurrentReason = "Button " + btn + " release";
-                    _injector.KeyUp(hold.Key);
+                    ReleaseActionKey(i, hold.Key, "Button " + ActionButtonName(i) + " release");
                 }
                 _holds[i] = new ButtonHold();
             } else if (prev && curr) {
                 if (hold.SuppressUntilRelease) {
-                    PhysicalKey key = ApplyFnLayer(_mapping.Lookup(layer, (ActionButton)i));
+                    PhysicalKey key = layerKey;
                     if (touchChargingFn && IsFunctionKey(key)) {
                         AccumulateLeftStickKey(key);
                     }
@@ -1185,17 +1263,22 @@ internal sealed class MapperForm : Form {
                     continue;
                 }
 
-                PhysicalKey currentLayerKey = ApplyFnLayer(_mapping.Lookup(layer, (ActionButton)i));
+                PhysicalKey currentLayerKey = layerKey;
                 
                 if (hold.Key != currentLayerKey) {
+                    if (hold.KeyIsDown && ShouldSuppressLayerChangeDuringCharacterTap(hold, layer, now)) {
+                        ReleaseActionKey(i, hold.Key, "Button " + ActionButtonName(i) + " layer change suppress tap residue");
+                        hold.Key = PhysicalKey.None;
+                        hold.KeyIsDown = false;
+                        hold.RepeatEnabled = false;
+                        hold.SuppressUntilRelease = true;
+                        _holds[i] = hold;
+                        _prevDown[i] = curr;
+                        continue;
+                    }
+
                     if (hold.KeyIsDown) {
-                        string source = (i < 2 || i == 4 || i == 5) ? "DPad" : "FaceButton";
-                        string btn = ((ActionButton)i).ToString();
-                        if (source == "DPad") btn = btn == "Up" ? "Up" : btn == "Right" ? "Right" : btn == "Down" ? "Down" : "Left";
-                        _injector.CurrentSource = source;
-                        _injector.CurrentReason = "Button " + btn + " layer change release";
-                        _injector.KeyUp(hold.Key);
-                        
+                        ReleaseActionKey(i, hold.Key, "Button " + ActionButtonName(i) + " layer change release");
                         hold.KeyIsDown = false;
                     }
 
@@ -1209,22 +1292,95 @@ internal sealed class MapperForm : Form {
                     }
 
                     if (currentLayerKey != PhysicalKey.None) {
-                        string source = (i < 2 || i == 4 || i == 5) ? "DPad" : "FaceButton";
-                        string btn = ((ActionButton)i).ToString();
-                        if (source == "DPad") btn = btn == "Up" ? "Up" : btn == "Right" ? "Right" : btn == "Down" ? "Down" : "Left";
-                        _injector.CurrentSource = source;
-                        _injector.CurrentReason = "Button " + btn + " layer change press";
-                        _injector.KeyDown(currentLayerKey);
-                        hold.KeyIsDown = true;
+                        PressActionKey(i, currentLayerKey, "Button " + ActionButtonName(i) + " layer change press", ref hold, layer, layer == Layer.Base, now);
                     }
 
                     hold.Key = currentLayerKey;
+                    _holds[i] = hold;
+                } else {
+                    UpdateBaseRepeat(i, ref hold, now);
                     _holds[i] = hold;
                 }
             }
 
             _prevDown[i] = curr;
         }
+    }
+
+    private bool ShouldDeferInitialAction(Layer layer) {
+        return _config.ActionLayerGraceMs > 0;
+    }
+
+    private bool ShouldSuppressLayerChangeDuringCharacterTap(ButtonHold hold, Layer newLayer, double now) {
+        if (hold.KeyLayer == Layer.Base) return false;
+        if (newLayer == Layer.Base) return true;
+        if (hold.KeyLayer == newLayer) return false;
+        return now - hold.KeyDownMs <= _config.ActionLayerSwitchGuardMs;
+    }
+
+    private void PressActionKey(int index, PhysicalKey key, string reason, ref ButtonHold hold, Layer keyLayer, bool repeatable, double now) {
+        string source = ActionSource(index);
+        string btn = ActionButtonName(index);
+        _injector.CurrentSource = source;
+        _injector.CurrentReason = reason;
+        DebugSources("Source=" + source + " Button=" + btn + " Mode=Held -> " + MappingEngine.KeyName(key) + "Down");
+        _injector.KeyDown(key);
+        hold.Key = key;
+        hold.KeyLayer = keyLayer;
+        hold.KeyIsDown = true;
+        hold.RepeatEnabled = repeatable;
+        hold.KeyDownMs = now;
+        hold.RepeatStartedMs = now;
+        hold.NextRepeatMs = now + Math.Max(1, _config.RepeatDelayMs);
+    }
+
+    private void ReleaseActionKey(int index, PhysicalKey key, string reason) {
+        string source = ActionSource(index);
+        string btn = ActionButtonName(index);
+        DebugSources("Source=" + source + " Button=" + btn + " Mode=Held -> " + MappingEngine.KeyName(key) + "Up");
+        _injector.CurrentSource = source;
+        _injector.CurrentReason = reason;
+        _injector.KeyUp(key);
+    }
+
+    private void UpdateBaseRepeat(int index, ref ButtonHold hold, double now) {
+        if (!hold.RepeatEnabled || !hold.KeyIsDown || hold.Key == PhysicalKey.None) return;
+        if (now < hold.NextRepeatMs) return;
+
+        string source = ActionSource(index);
+        string btn = ActionButtonName(index);
+        _injector.CurrentSource = source;
+        _injector.CurrentReason = "Button " + btn + " progressive repeat";
+        DebugSources("Source=" + source + " Button=" + btn + " Mode=Repeat -> " + MappingEngine.KeyName(hold.Key) + "Down");
+        _injector.KeyDown(hold.Key);
+
+        double heldMs = Math.Max(0.0, now - hold.RepeatStartedMs);
+        double interval = BaseRepeatIntervalMs(heldMs);
+        hold.NextRepeatMs = now + interval;
+    }
+
+    private double BaseRepeatIntervalMs(double heldMs) {
+        double fast = Math.Max(5.0, _config.RepeatIntervalMs);
+        double slow = Math.Max(fast, _config.BaseRepeatSlowIntervalMs);
+        double ramp = Math.Max(1.0, _config.BaseRepeatRampMs);
+        double t = Clamp((heldMs - _config.RepeatDelayMs) / ramp, 0.0, 1.0);
+        double eased = t * t * (3.0 - 2.0 * t);
+        return slow + (fast - slow) * eased;
+    }
+
+    private static string ActionSource(int index) {
+        return (index < 2 || index == 4 || index == 5) ? "DPad" : "FaceButton";
+    }
+
+    private static string ActionButtonName(int index) {
+        string btn = ((ActionButton)index).ToString();
+        if (ActionSource(index) == "DPad") {
+            if (btn == "Up") return "Up";
+            if (btn == "Right") return "Right";
+            if (btn == "Down") return "Down";
+            if (btn == "Left") return "Left";
+        }
+        return btn;
     }
 
     private void UpdateMouseButtons(ControllerState s, double now) {
@@ -1410,8 +1566,16 @@ internal sealed class MapperForm : Form {
     private struct ButtonHold {
         public bool Down;
         public PhysicalKey Key;
+        public Layer KeyLayer;
         public bool KeyIsDown;
         public bool SuppressUntilRelease;
+        public bool Pending;
+        public bool PendingReleased;
+        public double PendingSinceMs;
+        public double KeyDownMs;
+        public bool RepeatEnabled;
+        public double RepeatStartedMs;
+        public double NextRepeatMs;
     }
 }
 
@@ -1986,22 +2150,22 @@ internal static class Program {
             }
             Console.WriteLine();
         }
-        Console.WriteLine("Reserved combinations output nothing: L1+R1, L2+R2, L1+R2, R1+L2, Any unsupported combination");
+        Console.WriteLine("Layer priority: latest triggered layer wins; R1+R2 and L1+L2 activate when the second key is pressed.");
         Console.WriteLine();
         Console.WriteLine("Resolution checks:");
-        PrintResolutionCheck(m, "R1+R2 + Square", false, true, false, true, ActionButton.Square);
-        PrintResolutionCheck(m, "R1+R2 + Triangle", false, true, false, true, ActionButton.Triangle);
-        PrintResolutionCheck(m, "R1+R2 + Left", false, true, false, true, ActionButton.Left);
-        PrintResolutionCheck(m, "L1+L2 + Up", true, false, true, false, ActionButton.Up);
-        PrintResolutionCheck(m, "L1+L2 + Square", true, false, true, false, ActionButton.Square);
-        PrintResolutionCheck(m, "L1+R1 + Square", true, true, false, false, ActionButton.Square);
-        PrintResolutionCheck(m, "L2+R2 + Square", false, false, true, true, ActionButton.Square);
+        PrintResolutionCheck(m, "R1 then R2 + Square", false, true, false, true, 0, 10, 0, 20, ActionButton.Square);
+        PrintResolutionCheck(m, "R1+R2 then L1 + Square", true, true, false, true, 30, 10, 0, 20, ActionButton.Square);
+        PrintResolutionCheck(m, "R1+R2 release R2 + Square", false, true, false, false, 0, 10, 0, 20, ActionButton.Square);
+        PrintResolutionCheck(m, "L1 then L2 + Up", true, false, true, false, 10, 0, 20, 0, ActionButton.Up);
+        PrintResolutionCheck(m, "L1+L2 then R2 + Up", true, false, true, true, 10, 0, 20, 30, ActionButton.Up);
+        PrintResolutionCheck(m, "R1 then L1 + Square", true, true, false, false, 20, 10, 0, 0, ActionButton.Square);
+        PrintResolutionCheck(m, "L2 then R2 + Square", false, false, true, true, 0, 0, 10, 20, ActionButton.Square);
     }
 
-    private static void PrintResolutionCheck(MappingEngine mapping, string label, bool l1, bool r1, bool l2, bool r2, ActionButton action) {
-        Layer layer = mapping.Resolve(l1, r1, l2, r2, 0, 0, 0, 0);
+    private static void PrintResolutionCheck(MappingEngine mapping, string label, bool l1, bool r1, bool l2, bool r2, double l1Ms, double r1Ms, double l2Ms, double r2Ms, ActionButton action) {
+        Layer layer = mapping.Resolve(l1, r1, l2, r2, l1Ms, r1Ms, l2Ms, r2Ms);
         PhysicalKey key = mapping.Lookup(layer, action);
-        Console.WriteLine(label + " = " + LayerTestKeyName(key));
+        Console.WriteLine(label + " = " + LayerDisplayName(layer) + " / " + LayerTestKeyName(key));
     }
 
     private static void PrintMouseTest(Config config) {
