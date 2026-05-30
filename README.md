@@ -1,10 +1,32 @@
 # ShikiPad
 
-ShikiPad is a Windows keyboard and mouse mapper for the PlayStation 5 DualSense controller. It reads the controller through Direct HID and sends real keyboard/mouse input through `SendInput`.
+ShikiPad is a Windows keyboard and mouse mapper for DualSense, Xbox 360, and Xbox Series X|S controllers. It reads DualSense through Direct HID, reads Xbox controllers through XInput, and sends real keyboard/mouse input through `SendInput`.
 
 This release is tuned for fast text entry. Letter, number, and punctuation layers use one-shot virtual taps, while the base navigation layer keeps real held keys and progressive repeat.
 
 Chinese documentation: [README.zh-CN.md](README.zh-CN.md)
+
+## Controller Selection
+
+On startup, the terminal UI asks for the controller profile before the mapper begins reading input:
+
+| Choice | Controller | Backend |
+|---:|---|---|
+| 1 | DualSense / DS5 | Direct HID |
+| 2 | Xbox 360 controller | XInput |
+| 3 | Xbox Series X|S controller | XInput |
+
+The selected profile is fixed for that run. ShikiPad does not inspect incoming button signals every frame to guess which controller is connected, so the running input path stays lean.
+
+For shortcuts or launchers, you can skip the prompt:
+
+```powershell
+.\ShikiPad.exe --controller=ds5
+.\ShikiPad.exe --controller=xbox360
+.\ShikiPad.exe --controller=xboxseries
+```
+
+Xbox controllers do not have a DualSense touchpad. Their View/Back button acts as ShikiPad's touchpad clutch for the left-stick accumulator. Menu/Start remains the Options button, so View/Back + Menu/Start is still the emergency enable/disable hold.
 
 ## Final Input Model
 
@@ -197,6 +219,9 @@ Important locations in `src/ShikiPad.cs`:
 | Config file loading/saving | `Config.Load` and `Config.Save` |
 | Layer mapping tables | `MappingEngine` constructor |
 | Latest-layer resolution | `MappingEngine.Resolve` |
+| Startup controller selection | `Program.SelectControllerProfile`, `DirectHidController` constructor |
+| DualSense Direct HID parsing | `DirectHidController.ParseReport` |
+| Xbox XInput parsing | `DirectHidController.XInputLoop`, `DirectHidController.ParseXInput` |
 | Action-button state machine | `MapperForm.UpdateActionButtons` |
 | Character virtual taps | `TapActionKey` |
 | Base-layer held/repeat logic | `PressActionKey`, `UpdateBaseRepeat`, `BaseRepeatIntervalMs` |

@@ -56,6 +56,11 @@ internal enum HeldModifier {
     Win
 }
 
+internal enum ControllerProfile {
+    DualSense,
+    Xbox360,
+    XboxSeries
+}
 
 internal sealed class Config {
     public bool Enabled = true;
@@ -620,13 +625,30 @@ internal sealed class ControllerState {
 
 internal sealed class DirectHidController {
     public readonly ControllerState State = new ControllerState();
+    private readonly ControllerProfile _profile;
     private Thread _thread;
     private volatile bool _running;
     private IntPtr _handle = IntPtr.Zero;
     private string _deviceName = "Sony Controller";
+    private int _xinputUserIndex = -1;
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool ReadFile(IntPtr hFile, byte[] lpBuffer, uint nNumberOfBytesToRead, out uint lpNumberOfBytesRead, IntPtr lpOverlapped);
+
+    public DirectHidController(ControllerProfile profile) {
+        _profile = profile;
+        _deviceName = DisplayName;
+    }
+
+    public string DisplayName {
+        get {
+            switch (_profile) {
+                case ControllerProfile.Xbox360: return "Xbox 360 Controller / XInput";
+                case ControllerProfile.XboxSeries: return "Xbox Series X|S Controller / XInput";
+                default: return "DualSense / Direct HID";
+            }
+        }
+    }
 
     public void Start() {
         _running = true;
@@ -646,6 +668,11 @@ internal sealed class DirectHidController {
     }
 
     private void Loop() {
+        if (_profile != ControllerProfile.DualSense) {
+            XInputLoop();
+            return;
+        }
+
         byte[] buffer = new byte[1024];
         while (_running) {
             if (_handle == IntPtr.Zero || _handle == new IntPtr(-1)) {
@@ -678,6 +705,84 @@ internal sealed class DirectHidController {
                 _handle = IntPtr.Zero;
             }
         }
+    }
+
+    private void XInputLoop() {
+        while (_running) {
+            NativeMethods.XINPUT_STATE state;
+            int result = XInputGetState(ref _xinputUserIndex, out state);
+            if (result == 0) {
+                if (!State.Connected) {
+                    State.Connected = true;
+                    Logger.Info("XInput controller connected: " + DisplayName + " slot " + _xinputUserIndex.ToString(CultureInfo.InvariantCulture));
+                }
+                ParseXInput(state.Gamepad);
+                Thread.Sleep(1);
+            } else {
+                if (State.Connected) {
+                    Logger.Warn("XInput controller disconnected");
+                    ClearControllerState();
+                }
+                State.Connected = false;
+                _xinputUserIndex = -1;
+                Thread.Sleep(1000);
+            }
+        }
+    }
+
+    private static int XInputGetState(ref int userIndex, out NativeMethods.XINPUT_STATE state) {
+        state = new NativeMethods.XINPUT_STATE();
+        if (userIndex >= 0) {
+            int result = NativeMethods.XInputGetStateAny(userIndex, out state);
+            if (result == 0) return 0;
+            userIndex = -1;
+        }
+
+        for (int i = 0; i < 4; i++) {
+            int result = NativeMethods.XInputGetStateAny(i, out state);
+            if (result == 0) {
+                userIndex = i;
+                return 0;
+            }
+        }
+        return 1167;
+    }
+
+    private void ParseXInput(NativeMethods.XINPUT_GAMEPAD gamepad) {
+        ushort b = gamepad.wButtons;
+        State.LX = Axis(gamepad.sThumbLX);
+        State.LY = -Axis(gamepad.sThumbLY);
+        State.RX = Axis(gamepad.sThumbRX);
+        State.RY = -Axis(gamepad.sThumbRY);
+        State.L2 = Trigger(gamepad.bLeftTrigger);
+        State.R2 = Trigger(gamepad.bRightTrigger);
+
+        State.Up = (b & NativeMethods.XINPUT_GAMEPAD_DPAD_UP) != 0;
+        State.Down = (b & NativeMethods.XINPUT_GAMEPAD_DPAD_DOWN) != 0;
+        State.Left = (b & NativeMethods.XINPUT_GAMEPAD_DPAD_LEFT) != 0;
+        State.Right = (b & NativeMethods.XINPUT_GAMEPAD_DPAD_RIGHT) != 0;
+        State.Square = (b & NativeMethods.XINPUT_GAMEPAD_X) != 0;
+        State.Cross = (b & NativeMethods.XINPUT_GAMEPAD_A) != 0;
+        State.Circle = (b & NativeMethods.XINPUT_GAMEPAD_B) != 0;
+        State.Triangle = (b & NativeMethods.XINPUT_GAMEPAD_Y) != 0;
+        State.L1 = (b & NativeMethods.XINPUT_GAMEPAD_LEFT_SHOULDER) != 0;
+        State.R1 = (b & NativeMethods.XINPUT_GAMEPAD_RIGHT_SHOULDER) != 0;
+        State.L3 = (b & NativeMethods.XINPUT_GAMEPAD_LEFT_THUMB) != 0;
+        State.R3 = (b & NativeMethods.XINPUT_GAMEPAD_RIGHT_THUMB) != 0;
+        State.Create = (b & NativeMethods.XINPUT_GAMEPAD_BACK) != 0;
+        State.Options = (b & NativeMethods.XINPUT_GAMEPAD_START) != 0;
+
+        State.TouchpadAvailable = false;
+        State.TouchActive = false;
+        State.TouchClick = State.Create;
+    }
+
+    private void ClearControllerState() {
+        State.LX = State.LY = State.RX = State.RY = State.L2 = State.R2 = 0.0;
+        State.Up = State.Right = State.Down = State.Left = false;
+        State.Square = State.Triangle = State.Cross = State.Circle = false;
+        State.L1 = State.R1 = State.L3 = State.R3 = State.Options = State.Create = false;
+        State.TouchActive = State.TouchClick = false;
     }
 
     private IntPtr FindAndOpenDevice() {
@@ -817,6 +922,11 @@ internal sealed class DirectHidController {
     }
 
     private static double Axis(byte value) { return Clamp(((double)value - 128.0) / 127.0, -1.0, 1.0); }
+    private static double Axis(short value) {
+        return value < 0
+            ? Clamp((double)value / 32768.0, -1.0, 0.0)
+            : Clamp((double)value / 32767.0, 0.0, 1.0);
+    }
     private static double Trigger(byte value) { return Clamp((double)value / 255.0, 0.0, 1.0); }
     private static double Clamp(double value, double min, double max) { return value < min ? min : (value > max ? max : value); }
 
@@ -859,6 +969,41 @@ internal static class NativeMethods {
         [DllImport("hid.dll", SetLastError = true)] public static extern bool HidD_GetAttributes(IntPtr device, ref NativeMethods.HIDD_ATTRIBUTES attributes);
         [DllImport("hid.dll", SetLastError = true, CharSet = CharSet.Auto)] public static extern bool HidD_GetProductString(IntPtr hidDeviceObject, IntPtr buffer, uint bufferLength);
 
+        public const ushort XINPUT_GAMEPAD_DPAD_UP = 0x0001;
+        public const ushort XINPUT_GAMEPAD_DPAD_DOWN = 0x0002;
+        public const ushort XINPUT_GAMEPAD_DPAD_LEFT = 0x0004;
+        public const ushort XINPUT_GAMEPAD_DPAD_RIGHT = 0x0008;
+        public const ushort XINPUT_GAMEPAD_START = 0x0010;
+        public const ushort XINPUT_GAMEPAD_BACK = 0x0020;
+        public const ushort XINPUT_GAMEPAD_LEFT_THUMB = 0x0040;
+        public const ushort XINPUT_GAMEPAD_RIGHT_THUMB = 0x0080;
+        public const ushort XINPUT_GAMEPAD_LEFT_SHOULDER = 0x0100;
+        public const ushort XINPUT_GAMEPAD_RIGHT_SHOULDER = 0x0200;
+        public const ushort XINPUT_GAMEPAD_A = 0x1000;
+        public const ushort XINPUT_GAMEPAD_B = 0x2000;
+        public const ushort XINPUT_GAMEPAD_X = 0x4000;
+        public const ushort XINPUT_GAMEPAD_Y = 0x8000;
+
+        public static int XInputGetStateAny(int userIndex, out XINPUT_STATE state) {
+            try {
+                return XInputGetState14(userIndex, out state);
+            } catch (DllNotFoundException) {
+                try { return XInputGetState910(userIndex, out state); }
+                catch (DllNotFoundException) { state = new XINPUT_STATE(); return 1167; }
+                catch (EntryPointNotFoundException) { state = new XINPUT_STATE(); return 1167; }
+            } catch (EntryPointNotFoundException) {
+                try { return XInputGetState910(userIndex, out state); }
+                catch (DllNotFoundException) { state = new XINPUT_STATE(); return 1167; }
+                catch (EntryPointNotFoundException) { state = new XINPUT_STATE(); return 1167; }
+            }
+        }
+
+        [DllImport("xinput1_4.dll", EntryPoint = "XInputGetState")]
+        private static extern int XInputGetState14(int dwUserIndex, out XINPUT_STATE pState);
+
+        [DllImport("xinput9_1_0.dll", EntryPoint = "XInputGetState")]
+        private static extern int XInputGetState910(int dwUserIndex, out XINPUT_STATE pState);
+
         [StructLayout(LayoutKind.Sequential)]
         public struct SP_DEVICE_INTERFACE_DATA {
             public uint cbSize;
@@ -874,10 +1019,27 @@ internal static class NativeMethods {
             public ushort ProductID;
             public ushort VersionNumber;
         }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct XINPUT_STATE {
+            public uint dwPacketNumber;
+            public XINPUT_GAMEPAD Gamepad;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct XINPUT_GAMEPAD {
+            public ushort wButtons;
+            public byte bLeftTrigger;
+            public byte bRightTrigger;
+            public short sThumbLX;
+            public short sThumbLY;
+            public short sThumbRX;
+            public short sThumbRY;
+        }
     }
 
 internal sealed class MapperForm : Form {
-    private DirectHidController _hid = new DirectHidController();
+    private readonly DirectHidController _hid;
     private readonly Config _config;
     private readonly InputInjector _injector;
     private readonly MappingEngine _mapping = new MappingEngine();
@@ -914,8 +1076,9 @@ internal sealed class MapperForm : Form {
     private double _touchStartMs;
     private double _lastTickMs;
 
-    public MapperForm(Config config, bool debugAltTab, bool debugSources, bool traceInput, bool traceSendinput) {
+    public MapperForm(Config config, ControllerProfile controllerProfile, bool debugAltTab, bool debugSources, bool traceInput, bool traceSendinput) {
         _config = config;
+        _hid = new DirectHidController(controllerProfile);
         _debugAltTab = debugAltTab;
         _debugSources = debugSources;
         _enabled = config.Enabled;
@@ -938,7 +1101,7 @@ internal sealed class MapperForm : Form {
             var pc = new System.Diagnostics.PerformanceCounter("Process", "Creating Process ID", Process.GetCurrentProcess().ProcessName);
             parentId = (int)pc.NextValue();
         } catch { }
-        Program.PrintRuntimeStatus(Process.GetCurrentProcess().MainModule.FileName, Process.GetCurrentProcess().Id, parentId, "rawinput", true);
+        Program.PrintRuntimeStatus(Process.GetCurrentProcess().MainModule.FileName, Process.GetCurrentProcess().Id, parentId, _hid.DisplayName, true);
         
         _timer.Start();
         _lastTickMs = NowMs();
@@ -2098,7 +2261,9 @@ internal static class Program {
             return 0;
         }
 
+        ControllerProfile controllerProfile = SelectControllerProfile(args);
         Logger.Info("startup");
+        Logger.Info("controller profile: " + ControllerProfileName(controllerProfile));
         Logger.Info("mouse settings: rightStickDeadzone = " + config.RightStickDeadzone.ToString("0.0", CultureInfo.InvariantCulture) +
                     ", rightStickCurve = " + config.RightStickCurve +
                     ", rightStickCurveExponent = " + config.RightStickCurveExponent.ToString("0.###", CultureInfo.InvariantCulture) +
@@ -2129,8 +2294,82 @@ internal static class Program {
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Application.Run(new MapperForm(config, debugAltTab, debugSources, traceInput, traceSendinput));
+        Application.Run(new MapperForm(config, controllerProfile, debugAltTab, debugSources, traceInput, traceSendinput));
         return 0;
+    }
+
+    private static ControllerProfile SelectControllerProfile(string[] args) {
+        ControllerProfile fromArgs;
+        if (TryGetControllerProfileArg(args, out fromArgs)) return fromArgs;
+        try {
+            if (Console.IsInputRedirected) return ControllerProfile.DualSense;
+        } catch { }
+
+        EnableAnsi();
+        int width = GetConsoleWidth();
+        int panelWidth = Math.Min(104, Math.Max(66, width - 6));
+        Console.WriteLine();
+        WritePanelBorder(width, panelWidth, true, new Rgb(126, 226, 244));
+        WritePanelTitle(width, panelWidth, "\u25c7 CONTROLLER PROFILE \u25c7", new Rgb(235, 247, 252));
+        WritePanelSeparator(width, panelWidth, new Rgb(74, 94, 106));
+        WritePanelLine(width, panelWidth, "  [1] DualSense", "PS5 / Direct HID / touchpad clutch", new Rgb(126, 226, 244), new Rgb(245, 250, 255));
+        WritePanelLine(width, panelWidth, "  [2] Xbox 360", "XInput / View acts as touchpad clutch", new Rgb(113, 255, 194), new Rgb(245, 250, 255));
+        WritePanelLine(width, panelWidth, "  [3] Xbox Series X|S", "XInput / View acts as touchpad clutch", new Rgb(255, 211, 106), new Rgb(245, 250, 255));
+        WritePanelBorder(width, panelWidth, false, new Rgb(126, 226, 244));
+        Console.WriteLine();
+
+        while (true) {
+            WriteRgb(new Rgb(126, 226, 244), "Select controller profile [1/2/3, Enter = 1] > ");
+            Console.Write("\x1b[0m");
+            string line = Console.ReadLine();
+            if (line == null) return ControllerProfile.DualSense;
+            line = line.Trim();
+            if (line.Length == 0 || line == "1") return ControllerProfile.DualSense;
+            if (line == "2") return ControllerProfile.Xbox360;
+            if (line == "3") return ControllerProfile.XboxSeries;
+            WriteRgb(new Rgb(255, 142, 206), "Please choose 1, 2, or 3.\n");
+        }
+    }
+
+    private static bool TryGetControllerProfileArg(string[] args, out ControllerProfile profile) {
+        profile = ControllerProfile.DualSense;
+        for (int i = 0; i < args.Length; i++) {
+            string arg = args[i] ?? "";
+            string value = null;
+            if (arg.StartsWith("--controller=", StringComparison.OrdinalIgnoreCase)) {
+                value = arg.Substring("--controller=".Length);
+            } else if (String.Equals(arg, "--controller", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length) {
+                value = args[i + 1];
+            }
+            if (value != null) return TryParseControllerProfile(value, out profile);
+        }
+        return false;
+    }
+
+    private static bool TryParseControllerProfile(string value, out ControllerProfile profile) {
+        string v = (value ?? "").Trim().ToLowerInvariant().Replace("-", "").Replace("_", "").Replace(" ", "");
+        if (v == "1" || v == "ds5" || v == "dualsense" || v == "ps5") {
+            profile = ControllerProfile.DualSense;
+            return true;
+        }
+        if (v == "2" || v == "xbox360" || v == "x360") {
+            profile = ControllerProfile.Xbox360;
+            return true;
+        }
+        if (v == "3" || v == "xboxseries" || v == "xboxseriesxs" || v == "xsx" || v == "xss" || v == "xboxxs") {
+            profile = ControllerProfile.XboxSeries;
+            return true;
+        }
+        profile = ControllerProfile.DualSense;
+        return false;
+    }
+
+    private static string ControllerProfileName(ControllerProfile profile) {
+        switch (profile) {
+            case ControllerProfile.Xbox360: return "Xbox 360 Controller / XInput";
+            case ControllerProfile.XboxSeries: return "Xbox Series X|S Controller / XInput";
+            default: return "DualSense / Direct HID";
+        }
     }
 
     private static bool HasArg(string[] args, string value) {
