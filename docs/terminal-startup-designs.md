@@ -2,6 +2,15 @@
 
 These are terminal-only layouts for Windows Terminal, CMD, and PowerShell. They are designed for dark backgrounds and ANSI 24-bit color.
 
+Canonical palette order:
+
+- Spring mint: `#5EFFC5`
+- Summer gold: `#FFE05E`
+- Autumn ember: `#FF9452`
+- Winter frost: `#EBFAFF`
+
+The ShikiPad logo uses this exact left-to-right order, matching the season rail above it. The live implementation uses filled block glyphs with a right/down extruded shadow rather than a hollow outline.
+
 ## Final Recommended Version
 
 ```text
