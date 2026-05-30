@@ -5,11 +5,12 @@ These are terminal-only layouts for Windows Terminal, CMD, and PowerShell. They 
 Canonical palette order:
 
 - Spring mint: `#5EFFC5`
-- Summer gold: `#FFE05E`
+- Summer aqua: `#5BE2FF`
+- Solar gold bridge: `#FFD75C`
 - Autumn ember: `#FF9452`
 - Winter frost: `#EBFAFF`
 
-The ShikiPad logo uses this exact left-to-right order, matching the season rail above it. The live implementation uses filled block glyphs with a right/down extruded shadow rather than a hollow outline.
+The ShikiPad logo uses this left-to-right order, matching the season rail while placing the gold bridge slightly right of center. The live implementation uses filled block glyphs with a right/down extruded shadow rather than a hollow outline, plus embossed shadows on the surrounding terminal text and symbols.
 
 ## Final Recommended Version
 

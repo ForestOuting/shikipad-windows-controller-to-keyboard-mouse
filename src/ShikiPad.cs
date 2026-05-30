@@ -1916,7 +1916,7 @@ internal static class Program {
         WriteSeasonRail(width, panelWidth);
         WriteReadyLine(width, panelWidth);
         WriteLogoHalo(width, panelWidth, true);
-        WriteExtrudedLogo(width, logo, SeasonStops());
+        WriteExtrudedLogo(width, logo, SeasonFlowStops());
         WriteLogoHalo(width, panelWidth, false);
         WritePixelSubline(width, panelWidth);
         WriteStatusCard(width, panelWidth);
@@ -2083,20 +2083,38 @@ internal static class Program {
         };
     }
 
+    private static Rgb[] SeasonFlowStops() {
+        return new Rgb[] {
+            SeasonSpring(),
+            new Rgb(91, 251, 226),
+            SeasonSummer(),
+            new Rgb(198, 244, 255),
+            new Rgb(255, 238, 154),
+            SeasonGold(),
+            new Rgb(255, 183, 112),
+            SeasonAutumn(),
+            new Rgb(255, 213, 168),
+            SeasonWinter()
+        };
+    }
+
     private static Rgb[] SeasonGlowStops() {
         return new Rgb[] {
             new Rgb(72, 255, 202),
-            new Rgb(255, 236, 124),
-            new Rgb(255, 157, 86),
+            new Rgb(91, 226, 255),
+            SeasonGold(),
+            new Rgb(255, 163, 102),
             new Rgb(244, 252, 255)
         };
     }
 
     private static Rgb SeasonSpring() { return new Rgb(94, 255, 197); }
-    private static Rgb SeasonSummer() { return new Rgb(255, 224, 94); }
+    private static Rgb SeasonSummer() { return new Rgb(91, 226, 255); }
+    private static Rgb SeasonGold() { return new Rgb(255, 215, 92); }
     private static Rgb SeasonAutumn() { return new Rgb(255, 148, 82); }
     private static Rgb SeasonWinter() { return new Rgb(235, 250, 255); }
     private static Rgb PanelInk() { return new Rgb(48, 72, 86); }
+    private static Rgb ShadowInk() { return new Rgb(9, 18, 24); }
 
     private static string[] BuildShikiPadLogo() {
         string[][] glyphs = new string[][] {
@@ -2265,27 +2283,13 @@ internal static class Program {
     }
 
     private static void WriteReadyLine(int width, int panelWidth) {
-        int left = (width - panelWidth) / 2;
-        string ready = "CONTROL SURFACE READY";
-        string whisper = "\u2727  seasonal signal online  \u25c7  input layers armed  \u2727";
-
-        Console.Write(new string(' ', left));
-        WriteRgb(new Rgb(224, 238, 242), CenterLine(panelWidth, ready));
-        Console.WriteLine();
-
-        Console.Write(new string(' ', left));
-        WriteGradientText(CenterLine(panelWidth, whisper), SeasonStops());
-        Console.WriteLine();
+        WriteEmbossedCenteredText(width, panelWidth, "\u257a CONTROL SURFACE READY \u2578", SeasonGlowStops(), true);
+        WriteEmbossedCenteredText(width, panelWidth, "\u2727  seasonal signal online  \u25c7  input layers armed  \u2727", SeasonFlowStops(), false);
     }
 
     private static void WriteNeonRule(int width, int panelWidth, string title) {
-        int left = (width - panelWidth) / 2;
         string line = "\u2726\u2500\u2500 " + title + " " + new string('\u2500', Math.Max(0, panelWidth - title.Length - 7)) + "\u2726";
-        Console.Write(new string(' ', left));
-        Console.Write("\x1b[1m");
-        WriteGradientText(line, SeasonGlowStops());
-        Console.Write("\x1b[22m");
-        Console.WriteLine();
+        WriteEmbossedCenteredText(width, panelWidth, line, SeasonGlowStops(), true);
     }
 
     private static void WriteGradientText(string text, Rgb[] stops) {
@@ -2295,10 +2299,42 @@ internal static class Program {
         }
     }
 
+    private static void WriteEmbossedCenteredText(int width, int panelWidth, string text, Rgb[] stops, bool bold) {
+        int left = (width - panelWidth) / 2;
+        string line = CenterLine(panelWidth, text);
+        Console.Write(new string(' ', left + 1));
+        WriteGradientShadowGlyphs(line, stops);
+        Console.Write("\r");
+        Console.Write(new string(' ', left));
+        if (bold) Console.Write("\x1b[1m");
+        WriteGradientText(line, stops);
+        if (bold) Console.Write("\x1b[22m");
+        Console.WriteLine();
+    }
+
+    private static void WriteGradientShadowGlyphs(string text, Rgb[] stops) {
+        for (int i = 0; i < text.Length; i++) {
+            char c = text[i];
+            if (c == ' ') {
+                Console.Write(' ');
+            } else {
+                double t = text.Length <= 1 ? 1.0 : (double)i / (double)(text.Length - 1);
+                WriteRgb(Scale(GradientAt(stops, t), 0.22), "\u2592");
+            }
+        }
+    }
+
+    private static void WriteSeasonDropShadow(int width, int panelWidth) {
+        int left = Math.Max(0, (width - panelWidth) / 2 + 2);
+        Console.Write(new string(' ', left));
+        WriteRgb(ShadowInk(), RepeatPattern("\u2591", Math.Max(0, panelWidth - 2)));
+        Console.WriteLine();
+    }
+
     private static void WriteSeasonRail(int width, int panelWidth) {
         int left = (width - panelWidth) / 2;
         Console.Write(new string(' ', left));
-        WriteGradientText("\u256d" + new string('\u2500', panelWidth - 2) + "\u256e", SeasonStops());
+        WriteGradientText("\u256d" + new string('\u2500', panelWidth - 2) + "\u256e", SeasonFlowStops());
         Console.WriteLine();
 
         Console.Write(new string(' ', left));
@@ -2311,14 +2347,17 @@ internal static class Program {
         for (int i = 0; i < labels.Length; i++) {
             int cellWidth = (i == labels.Length - 1) ? inner - used : cell;
             string label = CenterLine(cellWidth, labels[i]);
+            Console.Write("\x1b[1m");
             WriteRgb(colors[i], label);
+            Console.Write("\x1b[22m");
             used += cellWidth;
         }
         WriteRgb(PanelInk(), "\u2502");
         Console.WriteLine();
         Console.Write(new string(' ', left));
-        WriteGradientText("\u2570" + new string('\u2500', panelWidth - 2) + "\u256f", SeasonStops());
+        WriteGradientText("\u2570" + new string('\u2500', panelWidth - 2) + "\u256f", SeasonFlowStops());
         Console.WriteLine();
+        WriteSeasonDropShadow(width, panelWidth);
     }
 
     private static void WriteAtmosphereLine(int width, int panelWidth, int variant) {
@@ -2344,22 +2383,15 @@ internal static class Program {
     }
 
     private static void WriteLogoHalo(int width, int panelWidth, bool top) {
-        int left = (width - panelWidth) / 2;
         string line = top
-            ? CenterLine(panelWidth, "\u273f Spring mint   \u25c7 Summer gold   \u25c8 Autumn ember   \u2744 Winter frost")
-            : CenterLine(panelWidth, "\u25c7  physical keys  \u2506  mouse curve  \u2506  touch clutch  \u25c7");
-        Console.Write(new string(' ', left));
-        WriteGradientText(TrimToWidth(line, panelWidth), SeasonStops());
-        Console.WriteLine();
+            ? "\u273f Spring mint   \u25c7 Summer aqua   \u25c6 Solar gold   \u25c8 Autumn ember   \u2744 Winter frost"
+            : "\u25c7  physical keys  \u2506  mouse curve  \u2506  touch clutch  \u25c7";
+        WriteEmbossedCenteredText(width, panelWidth, TrimToWidth(line, panelWidth), SeasonFlowStops(), false);
     }
 
     private static void WritePixelSubline(int width, int panelWidth) {
-        int left = (width - panelWidth) / 2;
         string text = "\u25a3 seasonal input mapper  \u25b8  physical keys / mouse / touch charge";
-        Console.Write(new string(' ', left));
-        WriteRgb(new Rgb(79, 97, 108), PadRight("", (panelWidth - DisplayWidth(text)) / 2));
-        WriteGradientText(text, SeasonStops());
-        Console.WriteLine();
+        WriteEmbossedCenteredText(width, panelWidth, text, SeasonFlowStops(), false);
     }
 
     private static void WriteStatusCard(int width, int panelWidth) {
@@ -2373,13 +2405,14 @@ internal static class Program {
         WritePanelLine(width, panelWidth, "  Season cycle", "Spring / Summer / Autumn / Winter", SeasonSummer(), new Rgb(235, 247, 252));
         WritePanelLine(width, panelWidth, "  Input safety", "Auto-release on close", SeasonAutumn(), new Rgb(245, 250, 255));
         WriteSeasonPanelBorder(width, panelWidth, false);
+        WriteSeasonDropShadow(width, panelWidth);
     }
 
     private static void WriteSeasonPanelBorder(int width, int panelWidth, bool top) {
         int left = (width - panelWidth) / 2;
         string line = (top ? "\u256d" : "\u2570") + new string('\u2500', panelWidth - 2) + (top ? "\u256e" : "\u256f");
         Console.Write(new string(' ', left));
-        WriteGradientText(line, SeasonStops());
+        WriteGradientText(line, SeasonFlowStops());
         Console.WriteLine();
     }
 
@@ -2387,7 +2420,7 @@ internal static class Program {
         int left = (width - panelWidth) / 2;
         Console.Write(new string(' ', left));
         WriteRgb(PanelInk(), "\u2502");
-        WriteGradientText(new string('\u2504', panelWidth - 2), SeasonStops());
+        WriteGradientText(new string('\u2504', panelWidth - 2), SeasonFlowStops());
         WriteRgb(PanelInk(), "\u2502");
         Console.WriteLine();
     }
@@ -2397,7 +2430,7 @@ internal static class Program {
         Console.Write(new string(' ', left));
         WriteRgb(PanelInk(), "\u2502");
         Console.Write("\x1b[1m");
-        WriteGradientText(CenterLine(panelWidth - 2, title), SeasonStops());
+        WriteGradientText(CenterLine(panelWidth - 2, title), SeasonFlowStops());
         Console.Write("\x1b[22m");
         WriteRgb(PanelInk(), "\u2502");
         Console.WriteLine();
@@ -2408,11 +2441,9 @@ internal static class Program {
         string text = "\u273f  Spring memory   \u25c7  Summer signal   \u25c8  Autumn keylight   \u2744  Winter layer online";
         string rule = RepeatPattern("\u2500\u22c5", panelWidth);
         Console.Write(new string(' ', left));
-        WriteGradientText(rule, SeasonStops());
+        WriteGradientText(rule, SeasonFlowStops());
         Console.WriteLine();
-        Console.Write(new string(' ', left));
-        WriteGradientText(CenterLine(panelWidth, text), SeasonStops());
-        Console.WriteLine();
+        WriteEmbossedCenteredText(width, panelWidth, text, SeasonFlowStops(), false);
     }
 
     private static void WritePanelBorder(int width, int panelWidth, bool top, Rgb color) {
@@ -2449,9 +2480,13 @@ internal static class Program {
 
         Console.Write(new string(' ', left));
         WriteRgb(new Rgb(72, 91, 101), "\u2502");
+        Console.Write("\x1b[1m");
         WriteRgb(leftColor, PadRight(TrimToWidth(leftText, column), column));
+        Console.Write("\x1b[22m");
         WriteRgb(new Rgb(72, 91, 101), "  \u2506  ");
+        Console.Write("\x1b[1m");
         WriteRgb(rightColor, PadRight(TrimToWidth(rightText, inner - column - gap), inner - column - gap));
+        Console.Write("\x1b[22m");
         WriteRgb(new Rgb(72, 91, 101), "\u2502");
         Console.WriteLine();
     }
@@ -2465,7 +2500,9 @@ internal static class Program {
 
         Console.Write(new string(' ', left));
         WriteRgb(new Rgb(72, 91, 101), "\u2502");
+        Console.Write("\x1b[1m");
         WriteRgb(labelColor, PadRight(label, labelWidth));
+        Console.Write("\x1b[22m");
         WriteRgb(new Rgb(72, 91, 101), " \u2506 ");
         WriteRgb(valueColor, PadRight(value, valueWidth));
         WriteRgb(new Rgb(72, 91, 101), "\u2502");
@@ -2535,16 +2572,17 @@ internal static class Program {
         string bottom = "\u2570" + RepeatPattern("\u2500\u22c5", panelWidth - 2) + "\u256f";
 
         Console.Write(new string(' ', left));
-        WriteGradientText(rail, SeasonStops());
+        WriteGradientText(rail, SeasonFlowStops());
         Console.WriteLine();
         Console.Write(new string(' ', left));
         WriteRgb(PanelInk(), "\u2502");
-        WriteGradientText(CenterLine(panelWidth - 2, text), SeasonStops());
+        WriteGradientText(CenterLine(panelWidth - 2, text), SeasonFlowStops());
         WriteRgb(PanelInk(), "\u2502");
         Console.WriteLine();
         Console.Write(new string(' ', left));
-        WriteGradientText(bottom, SeasonStops());
+        WriteGradientText(bottom, SeasonFlowStops());
         Console.WriteLine();
+        WriteSeasonDropShadow(width, panelWidth);
     }
 
     private static string ShortenPath(string path, int maxLength) {
