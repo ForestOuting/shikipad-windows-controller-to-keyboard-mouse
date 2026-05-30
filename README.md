@@ -309,4 +309,4 @@ This final release is optimized for practical fast typing:
 - Combo layers do not fall back while the action button is still held.
 - Pending layer capture stops when the action button is released, preventing cross-character contamination.
 - Shutdown paths automatically release ShikiPad-held inputs without a terminal exit command.
-- Startup terminal UI uses a filled, extruded ANSI logo, with the ShikiPad face flowing from Spring mint to Summer aqua, then through a middle-right Solar gold bridge into Autumn ember and Winter frost.
+- Startup terminal UI localizes to Chinese or English, keeps the ShikiPad name in English, and uses a filled extruded ANSI logo flowing from Spring mint to Summer aqua, through an unlabeled middle-right Solar gold bridge, into Autumn ember and pure-white Winter frost.

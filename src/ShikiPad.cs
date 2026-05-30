@@ -1909,18 +1909,19 @@ internal static class Program {
 
         int width = GetConsoleWidth();
         int panelWidth = Math.Min(104, Math.Max(66, width - 6));
+        bool zh = IsChineseUi();
 
         string[] logo = BuildShikiPadLogo();
         Console.WriteLine();
-        WriteNeonRule(width, panelWidth, "SHIKIPAD CONTROL SURFACE");
-        WriteSeasonRail(width, panelWidth);
-        WriteReadyLine(width, panelWidth);
-        WriteLogoHalo(width, panelWidth, true);
+        WriteNeonRule(width, panelWidth, zh ? "ShikiPad \u63a7\u5236\u754c\u9762" : "ShikiPad Control Surface");
+        WriteSeasonRail(width, panelWidth, zh);
+        WriteReadyLine(width, panelWidth, zh);
+        WriteLogoHalo(width, panelWidth, true, zh);
         WriteExtrudedLogo(width, logo, SeasonFlowStops());
-        WriteLogoHalo(width, panelWidth, false);
-        WritePixelSubline(width, panelWidth);
-        WriteStatusCard(width, panelWidth);
-        WriteSeasonDivider(width, panelWidth);
+        WriteLogoHalo(width, panelWidth, false, zh);
+        WritePixelSubline(width, panelWidth, zh);
+        WriteStatusCard(width, panelWidth, zh);
+        WriteSeasonDivider(width, panelWidth, zh);
         Console.WriteLine("\x1b[0m");
     }
 
@@ -1928,7 +1929,7 @@ internal static class Program {
         EnableAnsi();
         int width = GetConsoleWidth();
         int panelWidth = Math.Min(104, Math.Max(66, width - 6));
-        WriteLiveStatusBar(width, panelWidth);
+        WriteLiveStatusBar(width, panelWidth, IsChineseUi());
         Console.WriteLine("\x1b[0m");
     }
 
@@ -1937,17 +1938,19 @@ internal static class Program {
         int width = GetConsoleWidth();
         int panelWidth = Math.Min(104, Math.Max(66, width - 6));
         string fileName = Path.GetFileName(processPath);
+        bool zh = IsChineseUi();
 
         Console.WriteLine();
-        WritePanelBorder(width, panelWidth, true, new Rgb(139, 160, 172));
-        WritePanelTitle(width, panelWidth, "RUNTIME STATUS", new Rgb(233, 244, 248));
-        WritePanelSeparator(width, panelWidth, new Rgb(73, 90, 101));
-        WritePanelLine(width, panelWidth, "  Process", fileName + "  PID " + processId.ToString(CultureInfo.InvariantCulture), new Rgb(255, 199, 95), new Rgb(222, 238, 244));
-        WritePanelLine(width, panelWidth, "  Parent", parentId.ToString(CultureInfo.InvariantCulture), new Rgb(191, 132, 255), new Rgb(222, 238, 244));
-        WritePanelLine(width, panelWidth, "  Controller backend", backend, new Rgb(82, 190, 255), new Rgb(222, 238, 244));
-        WritePanelLine(width, panelWidth, "  Controller read", readsController ? "active in this process" : "inactive", new Rgb(68, 214, 164), new Rgb(222, 238, 244));
-        WritePanelLine(width, panelWidth, "  Path", ShortenPath(processPath, panelWidth - 14), new Rgb(185, 204, 214), new Rgb(206, 220, 226));
-        WritePanelBorder(width, panelWidth, false, new Rgb(139, 160, 172));
+        WriteSeasonPanelBorder(width, panelWidth, true);
+        WriteSeasonPanelTitle(width, panelWidth, zh ? "\u25c7 \u8fd0\u884c\u72b6\u6001 \u25c7" : "\u25c7 RUNTIME STATUS \u25c7");
+        WriteSeasonPanelSeparator(width, panelWidth);
+        WritePanelLine(width, panelWidth, zh ? "  \u8fdb\u7a0b" : "  Process", fileName + "  PID " + processId.ToString(CultureInfo.InvariantCulture), SeasonGold(), new Rgb(222, 238, 244));
+        WritePanelLine(width, panelWidth, zh ? "  \u7236\u8fdb\u7a0b" : "  Parent", parentId.ToString(CultureInfo.InvariantCulture), SeasonSummer(), new Rgb(222, 238, 244));
+        WritePanelLine(width, panelWidth, zh ? "  \u624b\u67c4\u540e\u7aef" : "  Controller backend", backend, SeasonSpring(), new Rgb(222, 238, 244));
+        WritePanelLine(width, panelWidth, zh ? "  \u624b\u67c4\u8bfb\u53d6" : "  Controller read", readsController ? (zh ? "\u672c\u8fdb\u7a0b\u6d3b\u8dc3" : "active in this process") : (zh ? "\u672a\u6d3b\u8dc3" : "inactive"), SeasonAutumn(), new Rgb(222, 238, 244));
+        WritePanelLine(width, panelWidth, zh ? "  \u8def\u5f84" : "  Path", ShortenPath(processPath, panelWidth - 14), SeasonWinter(), new Rgb(206, 220, 226));
+        WriteSeasonPanelBorder(width, panelWidth, false);
+        WriteSeasonDropShadow(width, panelWidth);
         Console.WriteLine("\x1b[0m");
     }
 
@@ -2112,7 +2115,7 @@ internal static class Program {
     private static Rgb SeasonSummer() { return new Rgb(91, 226, 255); }
     private static Rgb SeasonGold() { return new Rgb(255, 215, 92); }
     private static Rgb SeasonAutumn() { return new Rgb(255, 148, 82); }
-    private static Rgb SeasonWinter() { return new Rgb(235, 250, 255); }
+    private static Rgb SeasonWinter() { return new Rgb(255, 255, 255); }
     private static Rgb PanelInk() { return new Rgb(48, 72, 86); }
     private static Rgb ShadowInk() { return new Rgb(9, 18, 24); }
 
@@ -2282,9 +2285,9 @@ internal static class Program {
         Console.WriteLine();
     }
 
-    private static void WriteReadyLine(int width, int panelWidth) {
-        WriteEmbossedCenteredText(width, panelWidth, "\u257a CONTROL SURFACE READY \u2578", SeasonGlowStops(), true);
-        WriteEmbossedCenteredText(width, panelWidth, "\u2727  seasonal signal online  \u25c7  input layers armed  \u2727", SeasonFlowStops(), false);
+    private static void WriteReadyLine(int width, int panelWidth, bool zh) {
+        WriteEmbossedCenteredText(width, panelWidth, zh ? "\u257a \u63a7\u5236\u754c\u9762\u5df2\u5c31\u7eea \u2578" : "\u257a CONTROL SURFACE READY \u2578", SeasonGlowStops(), true);
+        WriteEmbossedCenteredText(width, panelWidth, zh ? "\u2727  \u56db\u5b63\u4fe1\u53f7\u5728\u7ebf  \u25c7  \u8f93\u5165\u5c42\u5df2\u5c31\u7eea  \u2727" : "\u2727  seasonal signal online  \u25c7  input layers armed  \u2727", SeasonFlowStops(), false);
     }
 
     private static void WriteNeonRule(int width, int panelWidth, string title) {
@@ -2331,7 +2334,7 @@ internal static class Program {
         Console.WriteLine();
     }
 
-    private static void WriteSeasonRail(int width, int panelWidth) {
+    private static void WriteSeasonRail(int width, int panelWidth, bool zh) {
         int left = (width - panelWidth) / 2;
         Console.Write(new string(' ', left));
         WriteGradientText("\u256d" + new string('\u2500', panelWidth - 2) + "\u256e", SeasonFlowStops());
@@ -2340,7 +2343,9 @@ internal static class Program {
         Console.Write(new string(' ', left));
         WriteRgb(PanelInk(), "\u2502");
         int inner = panelWidth - 2;
-        string[] labels = new string[] { "\u273f Spring", "\u25c7 Summer", "\u25c8 Autumn", "\u2744 Winter" };
+        string[] labels = zh
+            ? new string[] { "\u273f \u6625", "\u25c7 \u590f", "\u25c8 \u79cb", "\u2744 \u51ac" }
+            : new string[] { "\u273f Spring", "\u25c7 Summer", "\u25c8 Autumn", "\u2744 Winter" };
         Rgb[] colors = SeasonStops();
         int cell = inner / labels.Length;
         int used = 0;
@@ -2382,28 +2387,69 @@ internal static class Program {
         Console.WriteLine();
     }
 
-    private static void WriteLogoHalo(int width, int panelWidth, bool top) {
-        string line = top
-            ? "\u273f Spring mint   \u25c7 Summer aqua   \u25c6 Solar gold   \u25c8 Autumn ember   \u2744 Winter frost"
+    private static void WriteLogoHalo(int width, int panelWidth, bool top, bool zh) {
+        if (top) {
+            WriteSeasonLegend(width, panelWidth, zh);
+            return;
+        }
+        string line = zh
+            ? "\u25c7  \u7269\u7406\u6309\u952e  \u2506  \u9f20\u6807\u66f2\u7ebf  \u2506  \u89e6\u63a7\u677f\u84c4\u529b  \u25c7"
             : "\u25c7  physical keys  \u2506  mouse curve  \u2506  touch clutch  \u25c7";
         WriteEmbossedCenteredText(width, panelWidth, TrimToWidth(line, panelWidth), SeasonFlowStops(), false);
     }
 
-    private static void WritePixelSubline(int width, int panelWidth) {
-        string text = "\u25a3 seasonal input mapper  \u25b8  physical keys / mouse / touch charge";
+    private static void WriteSeasonLegend(int width, int panelWidth, bool zh) {
+        int left = (width - panelWidth) / 2;
+        int inner = panelWidth;
+        string[] labels = zh
+            ? new string[] { "\u273f \u6625\u4e4b\u8584\u8377", "\u25c7 \u590f\u4e4b\u6c34\u84dd", "\u25c8 \u79cb\u4e4b\u6696\u6a59", "\u2744 \u51ac\u4e4b\u971c\u767d" }
+            : new string[] { "\u273f Spring mint", "\u25c7 Summer aqua", "\u25c8 Autumn ember", "\u2744 Winter frost" };
+        Rgb[] colors = SeasonStops();
+        int cell = inner / labels.Length;
+        int used = 0;
+
+        Console.Write(new string(' ', left + 1));
+        for (int i = 0; i < labels.Length; i++) {
+            int cellWidth = (i == labels.Length - 1) ? inner - used : cell;
+            WriteRgb(Scale(colors[i], 0.22), CenterLine(cellWidth, ShadowText(labels[i])));
+            used += cellWidth;
+        }
+        Console.Write("\r");
+        Console.Write(new string(' ', left));
+        used = 0;
+        Console.Write("\x1b[1m");
+        for (int i = 0; i < labels.Length; i++) {
+            int cellWidth = (i == labels.Length - 1) ? inner - used : cell;
+            WriteRgb(colors[i], CenterLine(cellWidth, labels[i]));
+            used += cellWidth;
+        }
+        Console.Write("\x1b[22m");
+        Console.WriteLine();
+    }
+
+    private static string ShadowText(string text) {
+        StringBuilder sb = new StringBuilder(text.Length);
+        for (int i = 0; i < text.Length; i++) sb.Append(text[i] == ' ' ? ' ' : '\u2592');
+        return sb.ToString();
+    }
+
+    private static void WritePixelSubline(int width, int panelWidth, bool zh) {
+        string text = zh
+            ? "\u25a3 \u56db\u5b63\u8f93\u5165\u6620\u5c04\u5668  \u25b8  \u7269\u7406\u6309\u952e / \u9f20\u6807 / \u89e6\u63a7\u677f\u84c4\u529b"
+            : "\u25a3 seasonal input mapper  \u25b8  physical keys / mouse / touch charge";
         WriteEmbossedCenteredText(width, panelWidth, text, SeasonFlowStops(), false);
     }
 
-    private static void WriteStatusCard(int width, int panelWidth) {
+    private static void WriteStatusCard(int width, int panelWidth, bool zh) {
         WriteSeasonPanelBorder(width, panelWidth, true);
-        WriteSeasonPanelTitle(width, panelWidth, "\u25c7 SYSTEM STATUS \u25c7");
+        WriteSeasonPanelTitle(width, panelWidth, zh ? "\u25c7 \u7cfb\u7edf\u72b6\u6001 \u25c7" : "\u25c7 SYSTEM STATUS \u25c7");
         WriteSeasonPanelSeparator(width, panelWidth);
         WriteDoublePanelLine(width, panelWidth,
-            "Controller awake", "READY",
-            "Keyboard and mouse ready", "READY",
+            zh ? "\u624b\u67c4\u5df2\u5524\u9192" : "Controller awake", zh ? "\u5c31\u7eea" : "READY",
+            zh ? "\u952e\u76d8\u9f20\u6807\u5df2\u5c31\u7eea" : "Keyboard and mouse ready", zh ? "\u5c31\u7eea" : "READY",
             SeasonSpring(), SeasonWinter());
-        WritePanelLine(width, panelWidth, "  Season cycle", "Spring / Summer / Autumn / Winter", SeasonSummer(), new Rgb(235, 247, 252));
-        WritePanelLine(width, panelWidth, "  Input safety", "Auto-release on close", SeasonAutumn(), new Rgb(245, 250, 255));
+        WritePanelLine(width, panelWidth, zh ? "  \u56db\u5b63\u5faa\u73af" : "  Season cycle", zh ? "\u6625 / \u590f / \u79cb / \u51ac" : "Spring / Summer / Autumn / Winter", SeasonSummer(), SeasonWinter());
+        WritePanelLine(width, panelWidth, zh ? "  \u8f93\u5165\u5b89\u5168" : "  Input safety", zh ? "\u5173\u95ed\u65f6\u81ea\u52a8\u91ca\u653e" : "Auto-release on close", SeasonAutumn(), SeasonWinter());
         WriteSeasonPanelBorder(width, panelWidth, false);
         WriteSeasonDropShadow(width, panelWidth);
     }
@@ -2436,9 +2482,11 @@ internal static class Program {
         Console.WriteLine();
     }
 
-    private static void WriteSeasonDivider(int width, int panelWidth) {
+    private static void WriteSeasonDivider(int width, int panelWidth, bool zh) {
         int left = (width - panelWidth) / 2;
-        string text = "\u273f  Spring memory   \u25c7  Summer signal   \u25c8  Autumn keylight   \u2744  Winter layer online";
+        string text = zh
+            ? "\u273f  \u6625\u4e4b\u8bb0\u5fc6   \u25c7  \u590f\u4e4b\u4fe1\u53f7   \u25c8  \u79cb\u4e4b\u952e\u5149   \u2744  \u51ac\u4e4b\u5c42\u5728\u7ebf"
+            : "\u273f  Spring memory   \u25c7  Summer signal   \u25c8  Autumn keylight   \u2744  Winter layer online";
         string rule = RepeatPattern("\u2500\u22c5", panelWidth);
         Console.Write(new string(' ', left));
         WriteGradientText(rule, SeasonFlowStops());
@@ -2565,9 +2613,9 @@ internal static class Program {
         return sb.ToString();
     }
 
-    private static void WriteLiveStatusBar(int width, int panelWidth) {
+    private static void WriteLiveStatusBar(int width, int panelWidth, bool zh) {
         int left = (width - panelWidth) / 2;
-        string text = "\u25c6 Live session";
+        string text = zh ? "\u25c6 \u5b9e\u65f6\u8fd0\u884c" : "\u25c6 Live session";
         string rail = "\u256d" + RepeatPattern("\u2500\u22c5", panelWidth - 2) + "\u256e";
         string bottom = "\u2570" + RepeatPattern("\u2500\u22c5", panelWidth - 2) + "\u256f";
 
@@ -2707,18 +2755,20 @@ internal static class Program {
         EnableAnsi();
         int width = GetConsoleWidth();
         int panelWidth = Math.Min(104, Math.Max(66, width - 6));
+        bool zh = IsChineseUi();
         Console.WriteLine();
-        WritePanelBorder(width, panelWidth, true, new Rgb(126, 226, 244));
-        WritePanelTitle(width, panelWidth, "\u25c7 CONTROLLER PROFILE \u25c7", new Rgb(235, 247, 252));
-        WritePanelSeparator(width, panelWidth, new Rgb(74, 94, 106));
-        WritePanelLine(width, panelWidth, "  [1] DualSense", "PS5 / Direct HID / touchpad clutch", new Rgb(126, 226, 244), new Rgb(245, 250, 255));
-        WritePanelLine(width, panelWidth, "  [2] Xbox 360", "XInput / View or Menu touchpad clutch", new Rgb(113, 255, 194), new Rgb(245, 250, 255));
-        WritePanelLine(width, panelWidth, "  [3] Xbox Series X|S", "XInput / View or Menu touchpad clutch", new Rgb(255, 211, 106), new Rgb(245, 250, 255));
-        WritePanelBorder(width, panelWidth, false, new Rgb(126, 226, 244));
+        WriteSeasonPanelBorder(width, panelWidth, true);
+        WriteSeasonPanelTitle(width, panelWidth, zh ? "\u25c7 \u9009\u62e9\u624b\u67c4\u578b\u53f7 \u25c7" : "\u25c7 CONTROLLER PROFILE \u25c7");
+        WriteSeasonPanelSeparator(width, panelWidth);
+        WritePanelLine(width, panelWidth, "  [1] DualSense", zh ? "PS5 / Direct HID / \u89e6\u63a7\u677f\u84c4\u529b" : "PS5 / Direct HID / touchpad clutch", SeasonSummer(), new Rgb(245, 250, 255));
+        WritePanelLine(width, panelWidth, "  [2] Xbox 360", zh ? "XInput / View \u6216 Menu \u84c4\u529b" : "XInput / View or Menu touchpad clutch", SeasonSpring(), new Rgb(245, 250, 255));
+        WritePanelLine(width, panelWidth, "  [3] Xbox Series X|S", zh ? "XInput / View \u6216 Menu \u84c4\u529b" : "XInput / View or Menu touchpad clutch", SeasonGold(), new Rgb(245, 250, 255));
+        WriteSeasonPanelBorder(width, panelWidth, false);
+        WriteSeasonDropShadow(width, panelWidth);
         Console.WriteLine();
 
         while (true) {
-            WriteRgb(new Rgb(126, 226, 244), "Select controller profile [1/2/3, Enter = 1] > ");
+            WriteRgb(SeasonSummer(), zh ? "\u9009\u62e9\u624b\u67c4\u578b\u53f7 [1/2/3\uff0cEnter = 1] > " : "Select controller profile [1/2/3, Enter = 1] > ");
             Console.Write("\x1b[0m");
             string line = Console.ReadLine();
             if (line == null) return ControllerProfile.DualSense;
@@ -2726,7 +2776,7 @@ internal static class Program {
             if (line.Length == 0 || line == "1") return ControllerProfile.DualSense;
             if (line == "2") return ControllerProfile.Xbox360;
             if (line == "3") return ControllerProfile.XboxSeries;
-            WriteRgb(new Rgb(255, 142, 206), "Please choose 1, 2, or 3.\n");
+            WriteRgb(SeasonAutumn(), zh ? "\u8bf7\u9009\u62e9 1\u30012 \u6216 3\u3002\n" : "Please choose 1, 2, or 3.\n");
         }
     }
 
