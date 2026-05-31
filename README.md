@@ -99,17 +99,21 @@ ShikiPad sends physical key input. It does not output Unicode punctuation direct
 
 The current release uses these rules to keep typing stable:
 
-1. When an action button is pressed, ShikiPad waits `actionLayerGraceMs` before deciding the output layer.
-2. During that short window, the button records the latest non-base layer that appears while the button is still physically down. A newly pressed single layer can take over an older single layer only when it arrives within `layerTakeoverWindowMs` after the action button.
-3. If a character layer is selected, ShikiPad sends one virtual tap and suppresses further layer changes until the action button is released.
-4. If the base layer is selected, ShikiPad sends a real key down, keeps it held, and enables progressive repeat.
-5. If a combo layer such as `R1+R2` or `L1+L2` is selected, that combo is locked for that action-button press. Releasing one shoulder/trigger while the action button is still down will not fall back to a single layer.
-6. Fn-generated `F1-F12` keys are handled by the left-stick Fn state and keep their existing hold/charge behavior.
-7. `R1+R2` and `L1+L2` only become combo layers when the second key arrives within `comboLayerWindowMs`. If a trigger or shoulder has already been held longer than that window, a late overlap uses the newest single layer instead of accidentally becoming a combo.
+1. When an action button is pressed, ShikiPad waits `actionLayerGraceMs` before deciding the output layer. The current default is 80 ms.
+2. If the action button started on the base layer and the first shoulder/trigger layer is still active when that 80 ms window settles, the base action button is emitted through that first shoulder/trigger layer.
+3. If the action button started on a non-base layer and another shoulder/trigger layer is pressed later, the later layer can take over only action buttons that were pressed within `layerTakeoverWindowMs` and are still pending. The current default is 35 ms; after 35 ms, the action button keeps its original non-base layer.
+4. If a character layer is selected, ShikiPad sends one virtual tap and suppresses further layer changes until the action button is released.
+5. If the base layer is selected, ShikiPad sends a real key down, keeps it held, and enables progressive repeat.
+6. If a combo layer such as `R1+R2` or `L1+L2` is selected, that combo is locked for that action-button press. Releasing one shoulder/trigger while the action button is still down will not fall back to a single layer.
+7. Fn-generated `F1-F12` keys are handled by the left-stick Fn state and keep their existing hold/charge behavior.
+8. `R1+R2` and `L1+L2` only become combo layers when the second key arrives within `comboLayerWindowMs`. If a trigger or shoulder has already been held longer than that window, a late overlap uses the newest single layer instead of accidentally becoming a combo.
+
+In short: the first shoulder/trigger can pull a base action button back through the 80 ms settle window; a later shoulder/trigger can steal an already non-base pending action button only through the 35 ms takeover window.
 
 This is the intended typing behavior:
 
 - Quick `R1 + Right`, release, then quick `L1 + Square` should type `nd`, not `n Space`.
+- Press base-layer `Cross`, then hold `R1` before the 80 ms settle window ends, and it types `h`; if `R1` arrives after 80 ms, it does not turn that `Cross` into `h`.
 - Quick `L1 + Up`, then `Cross`, then `R1` within 35 ms should type `sh` even if `L1` is still held. At 70 ms, `Cross` stays on the earlier `L1` layer, which prevents the previous action button from being stolen by `R1`. On Xbox controllers, the same path is `LB + D-pad Up`, then `A`, then `RB`.
 - `R1+R2 + Cross` should type `,`; releasing R1 or R2 before Cross is released must not type `h` or `p`.
 
@@ -192,8 +196,8 @@ Current default settings:
 
 | Setting | Default | Meaning |
 |---|---:|---|
-| `actionLayerGraceMs` | 80 | Layer-confirmation window for action buttons. Increase if fast shoulder/trigger presses still fall back to base keys. Decrease if all character taps feel too delayed. |
-| `layerTakeoverWindowMs` | 35 | Look-back window for a newly pressed shoulder/trigger to take over an action button that was pressed just before it. Keep this shorter than `actionLayerGraceMs` to avoid stealing the previous action. |
+| `actionLayerGraceMs` | 80 | Layer-confirmation window for action buttons. The first shoulder/trigger layer can claim a still-held base action button pressed up to 80 ms earlier; increase if fast shoulder/trigger presses still fall back to base keys, or decrease if character taps feel too delayed. |
+| `layerTakeoverWindowMs` | 35 | Look-back window for a later shoulder/trigger layer to take over an already non-base pending action button. By default, it only claims action buttons pressed within the previous 35 ms; keep it no larger than `actionLayerGraceMs` to avoid stealing the previous action. |
 | `actionLayerSwitchGuardMs` | 120 | Secondary safety guard for non-base layer-change paths. Normal character input is already protected by virtual tap plus suppress-until-release. |
 | `comboLayerWindowMs` | 100 | Maximum time between R1/R2 or L1/L2 presses for a combo layer. Increase if intentional combos are hard to trigger. Decrease if late shoulder/trigger overlaps still become combos while switching layers. |
 | `repeatDelayMs` | 180 | Delay before base-layer repeat starts. |
@@ -205,6 +209,8 @@ Current default settings:
 | `r3FreezeMs` | 60 | Short mouse-movement freeze after R3, avoiding accidental pointer drift while right-clicking. |
 
 To tune shoulder/trigger combo timing, edit `comboLayerWindowMs` in `shikipad.json` and restart ShikiPad. A practical range is 70-140 ms: lower values favor fast layer switching, higher values make intentional combos easier.
+
+To tune how long the first shoulder/trigger can claim a base action button, edit `actionLayerGraceMs`. To tune how far a later shoulder/trigger can look back and steal an already non-base pending action button, edit `layerTakeoverWindowMs`. Both settings live in `shikipad.json` and take effect after restart; `layerTakeoverWindowMs` must be at least 0 and no larger than `actionLayerGraceMs`, or config loading falls back to a safe value.
 
 ### Analog Settings
 
@@ -224,12 +230,21 @@ Most users should only edit `shikipad.json`. Recompile only if you want to chang
 
 Important locations in `src/ShikiPad.cs`:
 
+To change the built-in default timing values in code, edit these fields in the `Config` class and rebuild:
+
+```csharp
+public int ActionLayerGraceMs = 80;
+public int LayerTakeoverWindowMs = 35;
+```
+
 | Area | Code location |
 |---|---|
 | Runtime config fields and defaults | `Config` class |
 | Config file loading/saving | `Config.Load` and `Config.Save` |
 | Layer mapping tables | `MappingEngine` constructor |
 | Latest-layer resolution | `MappingEngine.Resolve` |
+| First shoulder/trigger claiming a base action button | `Config.ActionLayerGraceMs`, used by the pending settle path in `MapperForm.UpdateActionButtons` |
+| Later shoulder/trigger takeover window | `Config.LayerTakeoverWindowMs`, used by `MapperForm.UpdatePendingLayer` / `MapperForm.ResolvePendingLayer` and validated in `Config.Load` so it cannot exceed `actionLayerGraceMs` |
 | Combo timing window | `comboLayerWindowMs` in `shikipad.json`, used by `MappingEngine.Resolve` |
 | Startup controller selection | `Program.SelectControllerProfile`, `DirectHidController` constructor |
 | DualSense Direct HID parsing | `DirectHidController.ParseReport` |
