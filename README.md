@@ -100,7 +100,7 @@ ShikiPad sends physical key input. It does not output Unicode punctuation direct
 The current release uses these rules to keep typing stable:
 
 1. When an action button is pressed, ShikiPad waits `actionLayerGraceMs` before deciding the output layer.
-2. During that short window, the button records the latest non-base layer that appears while the button is still physically down. A newly pressed single layer can take over an older single layer when it arrives after the action button.
+2. During that short window, the button records the latest non-base layer that appears while the button is still physically down. A newly pressed single layer can take over an older single layer only when it arrives within `layerTakeoverWindowMs` after the action button.
 3. If a character layer is selected, ShikiPad sends one virtual tap and suppresses further layer changes until the action button is released.
 4. If the base layer is selected, ShikiPad sends a real key down, keeps it held, and enables progressive repeat.
 5. If a combo layer such as `R1+R2` or `L1+L2` is selected, that combo is locked for that action-button press. Releasing one shoulder/trigger while the action button is still down will not fall back to a single layer.
@@ -110,7 +110,7 @@ The current release uses these rules to keep typing stable:
 This is the intended typing behavior:
 
 - Quick `R1 + Right`, release, then quick `L1 + Square` should type `nd`, not `n Space`.
-- Quick `L1 + Up`, then `Cross`, then `R1` within 70 ms should type `sh` even if `L1` is still held. On Xbox controllers, the same path is `LB + D-pad Up`, then `A`, then `RB`.
+- Quick `L1 + Up`, then `Cross`, then `R1` within 35 ms should type `sh` even if `L1` is still held. At 70 ms, `Cross` stays on the earlier `L1` layer, which prevents the previous action button from being stolen by `R1`. On Xbox controllers, the same path is `LB + D-pad Up`, then `A`, then `RB`.
 - `R1+R2 + Cross` should type `,`; releasing R1 or R2 before Cross is released must not type `h` or `p`.
 
 ## Touchpad Accumulator
@@ -178,6 +178,7 @@ Current default settings:
   "baseRepeatSlowIntervalMs": 160,
   "baseRepeatRampMs": 1200,
   "actionLayerGraceMs": 80,
+  "layerTakeoverWindowMs": 35,
   "actionLayerSwitchGuardMs": 120,
   "comboLayerWindowMs": 100,
   "useScanCode": true,
@@ -192,6 +193,7 @@ Current default settings:
 | Setting | Default | Meaning |
 |---|---:|---|
 | `actionLayerGraceMs` | 80 | Layer-confirmation window for action buttons. Increase if fast shoulder/trigger presses still fall back to base keys. Decrease if all character taps feel too delayed. |
+| `layerTakeoverWindowMs` | 35 | Look-back window for a newly pressed shoulder/trigger to take over an action button that was pressed just before it. Keep this shorter than `actionLayerGraceMs` to avoid stealing the previous action. |
 | `actionLayerSwitchGuardMs` | 120 | Secondary safety guard for non-base layer-change paths. Normal character input is already protected by virtual tap plus suppress-until-release. |
 | `comboLayerWindowMs` | 100 | Maximum time between R1/R2 or L1/L2 presses for a combo layer. Increase if intentional combos are hard to trigger. Decrease if late shoulder/trigger overlaps still become combos while switching layers. |
 | `repeatDelayMs` | 180 | Delay before base-layer repeat starts. |

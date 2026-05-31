@@ -81,6 +81,7 @@ internal sealed class Config {
     public int BaseRepeatSlowIntervalMs = 160;
     public int BaseRepeatRampMs = 1200;
     public int ActionLayerGraceMs = 80;
+    public int LayerTakeoverWindowMs = 35;
     public int ActionLayerSwitchGuardMs = 120;
     public int ComboLayerWindowMs = 100;
     public bool UseScanCode = true;
@@ -124,6 +125,7 @@ internal sealed class Config {
             cfg.BaseRepeatSlowIntervalMs = GetInt(text, "baseRepeatSlowIntervalMs", cfg.BaseRepeatSlowIntervalMs);
             cfg.BaseRepeatRampMs = GetInt(text, "baseRepeatRampMs", cfg.BaseRepeatRampMs);
             cfg.ActionLayerGraceMs = GetInt(text, "actionLayerGraceMs", cfg.ActionLayerGraceMs);
+            cfg.LayerTakeoverWindowMs = GetInt(text, "layerTakeoverWindowMs", cfg.LayerTakeoverWindowMs);
             cfg.ActionLayerSwitchGuardMs = GetInt(text, "actionLayerSwitchGuardMs", cfg.ActionLayerSwitchGuardMs);
             cfg.ComboLayerWindowMs = GetInt(text, "comboLayerWindowMs", cfg.ComboLayerWindowMs);
             cfg.UseScanCode = GetBool(text, "useScanCode", cfg.UseScanCode);
@@ -154,8 +156,15 @@ internal sealed class Config {
             if (!text.Contains("\"baseRepeatSlowIntervalMs\"") ||
                 !text.Contains("\"baseRepeatRampMs\"") ||
                 !text.Contains("\"actionLayerGraceMs\"") ||
+                !text.Contains("\"layerTakeoverWindowMs\"") ||
                 !text.Contains("\"actionLayerSwitchGuardMs\"") ||
                 !text.Contains("\"comboLayerWindowMs\"")) {
+                shouldSaveMigratedConfig = true;
+            }
+            if (cfg.LayerTakeoverWindowMs < 0 || cfg.LayerTakeoverWindowMs > cfg.ActionLayerGraceMs) {
+                int fallbackLayerTakeoverMs = Math.Min(35, Math.Max(0, cfg.ActionLayerGraceMs));
+                Logger.Warn("invalid layerTakeoverWindowMs; using " + fallbackLayerTakeoverMs.ToString(CultureInfo.InvariantCulture));
+                cfg.LayerTakeoverWindowMs = fallbackLayerTakeoverMs;
                 shouldSaveMigratedConfig = true;
             }
             if (cfg.ComboLayerWindowMs < 0 || cfg.ComboLayerWindowMs > 500) {
@@ -202,6 +211,7 @@ internal sealed class Config {
         Write(sb, "baseRepeatSlowIntervalMs", BaseRepeatSlowIntervalMs, true);
         Write(sb, "baseRepeatRampMs", BaseRepeatRampMs, true);
         Write(sb, "actionLayerGraceMs", ActionLayerGraceMs, true);
+        Write(sb, "layerTakeoverWindowMs", LayerTakeoverWindowMs, true);
         Write(sb, "actionLayerSwitchGuardMs", ActionLayerSwitchGuardMs, true);
         Write(sb, "comboLayerWindowMs", ComboLayerWindowMs, true);
         Write(sb, "useScanCode", UseScanCode, true);
@@ -1662,17 +1672,20 @@ internal sealed class MapperForm : Form {
             hold.PendingLayerLocked,
             hold.PendingSinceMs,
             layer,
-            layerMs);
+            layerMs,
+            _config.LayerTakeoverWindowMs);
 
         if (next == hold.PendingLayer) return;
         hold.PendingLayer = next;
         hold.PendingLayerMs = layerMs;
     }
 
-    internal static Layer ResolvePendingLayer(Layer pendingLayer, double pendingLayerMs, bool pendingLayerLocked, double pendingSinceMs, Layer layer, double layerMs) {
+    internal static Layer ResolvePendingLayer(Layer pendingLayer, double pendingLayerMs, bool pendingLayerLocked, double pendingSinceMs, Layer layer, double layerMs, double takeoverWindowMs) {
         if (pendingLayerLocked) return pendingLayer;
         if (layer == Layer.Base || layer == Layer.Reserved) return pendingLayer;
         if (layer == pendingLayer) return pendingLayer;
+        if (layerMs < pendingSinceMs) return pendingLayer;
+        if (layerMs - pendingSinceMs > takeoverWindowMs) return pendingLayer;
 
         bool pendingCombo = IsComboLayer(pendingLayer);
         bool layerCombo = IsComboLayer(layer);
@@ -1680,12 +1693,7 @@ internal sealed class MapperForm : Form {
 
         bool pendingSingle = pendingLayer != Layer.Base && pendingLayer != Layer.Reserved && !pendingCombo;
         if (pendingSingle && !layerCombo) {
-            if (layerMs < pendingSinceMs) return pendingLayer;
             if (layerMs <= pendingLayerMs) return pendingLayer;
-        } else if (pendingSingle && layerCombo) {
-            if (layerMs < pendingSinceMs) return pendingLayer;
-        } else if ((pendingLayer == Layer.Base || pendingLayer == Layer.Reserved) && layerMs < pendingSinceMs) {
-            return pendingLayer;
         }
 
         return layer;
@@ -2060,7 +2068,7 @@ internal static class Program {
             WritePanelLine(width, panelWidth, "  R2 / L2", "R2: m w j x q f p b    L2: k v 1 2 3 4 5 6", new Rgb(190, 133, 255), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  \u7ec4\u5408\u5c42", "R1+R2: 7 8 9 0 - = , .    L1+L2: ' / ; [ ] \\ `", new Rgb(255, 169, 85), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  \u7ec4\u5408\u7a97\u53e3", "R1/R2 \u6216 L1/L2 \u9700\u5728 " + config.ComboLayerWindowMs.ToString(CultureInfo.InvariantCulture) + "ms \u5185\u5408\u6309; \u8d85\u65f6\u6309\u6700\u540e\u5355\u5c42", new Rgb(126, 226, 244), new Rgb(245, 250, 255));
-            WritePanelLine(width, panelWidth, "  \u5c42\u786e\u8ba4", "\u52a8\u4f5c\u952e\u7b49\u5f85 " + config.ActionLayerGraceMs.ToString(CultureInfo.InvariantCulture) + "ms; \u65b0\u6309\u5355\u5c42\u53ef\u63a5\u7ba1", SeasonSummer(), new Rgb(245, 250, 255));
+            WritePanelLine(width, panelWidth, "  \u5c42\u786e\u8ba4", "\u52a8\u4f5c\u952e\u7b49 " + config.ActionLayerGraceMs.ToString(CultureInfo.InvariantCulture) + "ms; \u65b0\u5355\u5c42\u4ec5\u56de\u770b " + config.LayerTakeoverWindowMs.ToString(CultureInfo.InvariantCulture) + "ms", SeasonSummer(), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  \u84c4\u529b", xbox ? "View/Back \u6216 Menu/Start \u4efb\u610f\u4e00\u4e2a\u6309\u4f4f\u90fd\u7b97\u84c4\u529b" : "\u6309\u4f4f DualSense \u89e6\u63a7\u677f\u8fdb\u5165\u84c4\u529b", new Rgb(113, 255, 194), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  Fn", "\u5de6\u6447\u6746\u2197 + 1..0,-,= => F1..F12", new Rgb(255, 255, 255), new Rgb(245, 250, 255));
         } else {
@@ -2072,7 +2080,7 @@ internal static class Program {
             WritePanelLine(width, panelWidth, "  R2 / L2", "R2: m w j x q f p b    L2: k v 1 2 3 4 5 6", new Rgb(190, 133, 255), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  Combo layers", "R1+R2: 7 8 9 0 - = , .    L1+L2: ' / ; [ ] \\ `", new Rgb(255, 169, 85), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  Combo window", "R1/R2 or L1/L2 must pair within " + config.ComboLayerWindowMs.ToString(CultureInfo.InvariantCulture) + "ms; later overlaps use the newest single layer", new Rgb(126, 226, 244), new Rgb(245, 250, 255));
-            WritePanelLine(width, panelWidth, "  Layer settle", "Action waits " + config.ActionLayerGraceMs.ToString(CultureInfo.InvariantCulture) + "ms; newer single layer can take over", SeasonSummer(), new Rgb(245, 250, 255));
+            WritePanelLine(width, panelWidth, "  Layer settle", "Action waits " + config.ActionLayerGraceMs.ToString(CultureInfo.InvariantCulture) + "ms; takeover looks back " + config.LayerTakeoverWindowMs.ToString(CultureInfo.InvariantCulture) + "ms", SeasonSummer(), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  Clutch", xbox ? "Hold either View/Back or Menu/Start for touchpad charge" : "Hold the DualSense touchpad for touchpad charge", new Rgb(113, 255, 194), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  Fn", "Left stick UpRight + 1..0,-,= => F1..F12", new Rgb(255, 255, 255), new Rgb(245, 250, 255));
         }
@@ -3040,28 +3048,42 @@ internal static class Program {
         double l1Ms = 0.0;
         double upMs = 0.0;
         double crossMs = upMs + 100.0;
-        double r1Ms = crossMs + 70.0;
+        double quickR1Ms = crossMs + 30.0;
+        double lateR1Ms = crossMs + 70.0;
 
         Layer firstLayer = mapping.Resolve(true, false, false, false, l1Ms, 0, 0, 0, config.ComboLayerWindowMs);
         PhysicalKey firstKey = mapping.Lookup(firstLayer, ActionButton.Up);
         Layer crossStartLayer = mapping.Resolve(true, false, false, false, l1Ms, 0, 0, 0, config.ComboLayerWindowMs);
-        Layer afterR1Layer = mapping.Resolve(true, true, false, false, l1Ms, r1Ms, 0, 0, config.ComboLayerWindowMs);
-        Layer settledLayer = MapperForm.ResolvePendingLayer(crossStartLayer, l1Ms, false, crossMs, afterR1Layer, r1Ms);
-        PhysicalKey settledKey = mapping.Lookup(settledLayer, ActionButton.Cross);
+        Layer afterQuickR1Layer = mapping.Resolve(true, true, false, false, l1Ms, quickR1Ms, 0, 0, config.ComboLayerWindowMs);
+        Layer quickSettledLayer = MapperForm.ResolvePendingLayer(crossStartLayer, l1Ms, false, crossMs, afterQuickR1Layer, quickR1Ms, config.LayerTakeoverWindowMs);
+        PhysicalKey quickSettledKey = mapping.Lookup(quickSettledLayer, ActionButton.Cross);
+        Layer afterLateR1Layer = mapping.Resolve(true, true, false, false, l1Ms, lateR1Ms, 0, 0, config.ComboLayerWindowMs);
+        Layer lateSettledLayer = MapperForm.ResolvePendingLayer(crossStartLayer, l1Ms, false, crossMs, afterLateR1Layer, lateR1Ms, config.LayerTakeoverWindowMs);
+        PhysicalKey lateSettledKey = mapping.Lookup(lateSettledLayer, ActionButton.Cross);
 
         bool firstSettled = crossMs - upMs >= config.ActionLayerGraceMs;
-        bool r1WithinGrace = r1Ms - crossMs <= config.ActionLayerGraceMs;
+        bool quickInsideTakeover = quickR1Ms - crossMs <= config.LayerTakeoverWindowMs;
+        bool lateOutsideTakeover = lateR1Ms - crossMs > config.LayerTakeoverWindowMs;
+        bool lateStillInsideGrace = lateR1Ms - crossMs <= config.ActionLayerGraceMs;
         bool ok = firstSettled
-            && r1WithinGrace
+            && quickInsideTakeover
+            && lateOutsideTakeover
+            && lateStillInsideGrace
             && firstLayer == Layer.L1
             && firstKey == PhysicalKey.S
             && crossStartLayer == Layer.L1
-            && afterR1Layer == Layer.R1
-            && settledLayer == Layer.R1
-            && settledKey == PhysicalKey.H;
+            && afterQuickR1Layer == Layer.R1
+            && quickSettledLayer == Layer.R1
+            && quickSettledKey == PhysicalKey.H
+            && afterLateR1Layer == Layer.R1
+            && lateSettledLayer == Layer.L1
+            && lateSettledKey == PhysicalKey.Y;
 
+        Console.WriteLine("L1+Up -> s, then Cross + R1 after 30ms while L1 held = " +
+                          LayerDisplayName(quickSettledLayer) + " / " + LayerTestKeyName(quickSettledKey) +
+                          (quickSettledKey == PhysicalKey.H ? " [PASS]" : " [FAIL]"));
         Console.WriteLine("L1+Up -> s, then Cross + R1 after 70ms while L1 held = " +
-                          LayerDisplayName(settledLayer) + " / " + LayerTestKeyName(settledKey) +
+                          LayerDisplayName(lateSettledLayer) + " / " + LayerTestKeyName(lateSettledKey) +
                           (ok ? " [PASS]" : " [FAIL]"));
         return ok;
     }
