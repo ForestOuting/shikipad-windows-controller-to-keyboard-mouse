@@ -1191,6 +1191,8 @@ internal sealed class MapperForm : Form {
 
     private bool _prevL1, _prevR1;
     private double _l1DownMs, _r1DownMs, _l2DownMs, _r2DownMs;
+    private bool _modifierConflict;
+    private Layer _stableLayer;
 
     private void OnTick(object sender, EventArgs e) {
         ControllerState s = _hid.State;
@@ -1198,8 +1200,13 @@ internal sealed class MapperForm : Form {
         double deltaSec = Math.Max(0.0, (now - _lastTickMs) / 1000.0);
         _lastTickMs = now;
         
-        if (s.L1 && !_prevL1) _l1DownMs = now;
-        if (s.R1 && !_prevR1) _r1DownMs = now;
+        // Save pre-change modifier state before updating
+        bool preL1 = _prevL1;
+        bool preR1 = _prevR1;
+        bool l1JustDown = s.L1 && !preL1;
+        bool r1JustDown = s.R1 && !preR1;
+        if (l1JustDown) _l1DownMs = now;
+        if (r1JustDown) _r1DownMs = now;
         _prevL1 = s.L1;
         _prevR1 = s.R1;
 
@@ -1209,13 +1216,36 @@ internal sealed class MapperForm : Form {
             ReleaseHeldActionKeys();
             _leftDirection = StickDirection.None;
             _scrollNextMs = 0;
+            _modifierConflict = false;
             return;
         }
         if (!_printedConnectedGuide) {
             Program.PrintControllerGuide(_controllerProfile, _hid.DisplayName, _config);
             _printedConnectedGuide = true;
         }
+        bool preL2 = _l2Pressed;
+        bool preR2 = _r2Pressed;
         UpdateTriggers(s, now);
+        bool l2JustDown = _l2Pressed && !preL2;
+        bool r2JustDown = _r2Pressed && !preR2;
+
+        // Detect conflicting modifier change: a new modifier pressed while another is still held.
+        // In this case, action buttons pressed in this same frame should use the pre-change layer,
+        // not the current layer which is polluted by the newly-pressed modifier's timestamp.
+        bool anyStillHeld = (preL1 && s.L1) || (preR1 && s.R1) || (preL2 && _l2Pressed) || (preR2 && _r2Pressed);
+        _modifierConflict = anyStillHeld && (l1JustDown || r1JustDown || l2JustDown || r2JustDown);
+
+        if (_modifierConflict) {
+            // Compute layer using only modifiers that were already held (exclude just-pressed ones)
+            _stableLayer = _mapping.Resolve(
+                preL1 && s.L1, preR1 && s.R1, preL2 && _l2Pressed, preR2 && _r2Pressed,
+                _l1DownMs, _r1DownMs, _l2DownMs, _r2DownMs, _config.ComboLayerWindowMs);
+
+            // Existing pending buttons keep their grace window. A modifier pressed after
+            // the action button can still take over; only action buttons newly pressed in
+            // this same polling frame use the stable pre-change layer below.
+        }
+
         UpdateLeftStick(s, now);
         UpdateActionButtons(s, now);
         UpdateMouseButtons(s, now);
@@ -1395,6 +1425,7 @@ internal sealed class MapperForm : Form {
     private void UpdateActionButtons(ControllerState s, double now) {
         bool[] currentDown = new bool[] { s.Up, s.Right, s.Square, s.Triangle, s.Left, s.Down, s.Cross, s.Circle };
         Layer layer = _mapping.Resolve(s.L1, s.R1, _l2Pressed, _r2Pressed, _l1DownMs, _r1DownMs, _l2DownMs, _r2DownMs, _config.ComboLayerWindowMs);
+        double layerMs = LayerTimestamp(layer);
 
         for (int i = 0; i < 8; i++) {
             bool prev = _prevDown[i];
@@ -1408,7 +1439,7 @@ internal sealed class MapperForm : Form {
                     hold.PendingReleased = true;
                 }
                 if (curr) {
-                    UpdatePendingLayer(ref hold, layer);
+                    UpdatePendingLayer(ref hold, layer, layerMs);
                 }
 
                 bool shouldFlushPending = now - hold.PendingSinceMs >= _config.ActionLayerGraceMs;
@@ -1484,7 +1515,17 @@ internal sealed class MapperForm : Form {
                     hold = new ButtonHold();
                     hold.Down = true;
                     hold.Pending = true;
-                    hold.PendingLayer = layer;
+                    // If a modifier conflict was detected this tick, use the stable layer
+                    // (only pre-existing modifiers) to prevent the just-pressed modifier
+                    // from stealing this button's layer assignment
+                    if (_modifierConflict) {
+                        hold.PendingLayer = _stableLayer;
+                        hold.PendingLayerMs = LayerTimestamp(_stableLayer);
+                        hold.PendingLayerLocked = true;
+                    } else {
+                        hold.PendingLayer = layer;
+                        hold.PendingLayerMs = layerMs;
+                    }
                     hold.PendingSinceMs = now;
                     _holds[i] = hold;
                     _prevDown[i] = curr;
@@ -1602,10 +1643,52 @@ internal sealed class MapperForm : Form {
         return _config.ActionLayerGraceMs > 0;
     }
 
-    private void UpdatePendingLayer(ref ButtonHold hold, Layer layer) {
-        if (layer == Layer.Base || layer == Layer.Reserved) return;
-        if (IsComboLayer(hold.PendingLayer) && !IsComboLayer(layer)) return;
-        hold.PendingLayer = layer;
+    private double LayerTimestamp(Layer layer) {
+        switch (layer) {
+            case Layer.L1: return _l1DownMs;
+            case Layer.R1: return _r1DownMs;
+            case Layer.L2: return _l2DownMs;
+            case Layer.R2: return _r2DownMs;
+            case Layer.R1R2: return Math.Max(_r1DownMs, _r2DownMs);
+            case Layer.L1L2: return Math.Max(_l1DownMs, _l2DownMs);
+            default: return 0.0;
+        }
+    }
+
+    private void UpdatePendingLayer(ref ButtonHold hold, Layer layer, double layerMs) {
+        Layer next = ResolvePendingLayer(
+            hold.PendingLayer,
+            hold.PendingLayerMs,
+            hold.PendingLayerLocked,
+            hold.PendingSinceMs,
+            layer,
+            layerMs);
+
+        if (next == hold.PendingLayer) return;
+        hold.PendingLayer = next;
+        hold.PendingLayerMs = layerMs;
+    }
+
+    internal static Layer ResolvePendingLayer(Layer pendingLayer, double pendingLayerMs, bool pendingLayerLocked, double pendingSinceMs, Layer layer, double layerMs) {
+        if (pendingLayerLocked) return pendingLayer;
+        if (layer == Layer.Base || layer == Layer.Reserved) return pendingLayer;
+        if (layer == pendingLayer) return pendingLayer;
+
+        bool pendingCombo = IsComboLayer(pendingLayer);
+        bool layerCombo = IsComboLayer(layer);
+        if (pendingCombo && !layerCombo) return pendingLayer;
+
+        bool pendingSingle = pendingLayer != Layer.Base && pendingLayer != Layer.Reserved && !pendingCombo;
+        if (pendingSingle && !layerCombo) {
+            if (layerMs < pendingSinceMs) return pendingLayer;
+            if (layerMs <= pendingLayerMs) return pendingLayer;
+        } else if (pendingSingle && layerCombo) {
+            if (layerMs < pendingSinceMs) return pendingLayer;
+        } else if ((pendingLayer == Layer.Base || pendingLayer == Layer.Reserved) && layerMs < pendingSinceMs) {
+            return pendingLayer;
+        }
+
+        return layer;
     }
 
     private bool ShouldSuppressLayerChangeDuringCharacterTap(ButtonHold hold, Layer newLayer, double now) {
@@ -1884,8 +1967,10 @@ internal sealed class MapperForm : Form {
         public bool SuppressUntilRelease;
         public bool Pending;
         public Layer PendingLayer;
+        public double PendingLayerMs;
         public bool PendingReleased;
         public double PendingSinceMs;
+        public bool PendingLayerLocked;
         public double KeyDownMs;
         public bool RepeatEnabled;
         public double RepeatStartedMs;
@@ -1975,6 +2060,7 @@ internal static class Program {
             WritePanelLine(width, panelWidth, "  R2 / L2", "R2: m w j x q f p b    L2: k v 1 2 3 4 5 6", new Rgb(190, 133, 255), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  \u7ec4\u5408\u5c42", "R1+R2: 7 8 9 0 - = , .    L1+L2: ' / ; [ ] \\ `", new Rgb(255, 169, 85), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  \u7ec4\u5408\u7a97\u53e3", "R1/R2 \u6216 L1/L2 \u9700\u5728 " + config.ComboLayerWindowMs.ToString(CultureInfo.InvariantCulture) + "ms \u5185\u5408\u6309; \u8d85\u65f6\u6309\u6700\u540e\u5355\u5c42", new Rgb(126, 226, 244), new Rgb(245, 250, 255));
+            WritePanelLine(width, panelWidth, "  \u5c42\u786e\u8ba4", "\u52a8\u4f5c\u952e\u7b49\u5f85 " + config.ActionLayerGraceMs.ToString(CultureInfo.InvariantCulture) + "ms; \u65b0\u6309\u5355\u5c42\u53ef\u63a5\u7ba1", SeasonSummer(), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  \u84c4\u529b", xbox ? "View/Back \u6216 Menu/Start \u4efb\u610f\u4e00\u4e2a\u6309\u4f4f\u90fd\u7b97\u84c4\u529b" : "\u6309\u4f4f DualSense \u89e6\u63a7\u677f\u8fdb\u5165\u84c4\u529b", new Rgb(113, 255, 194), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  Fn", "\u5de6\u6447\u6746\u2197 + 1..0,-,= => F1..F12", new Rgb(255, 255, 255), new Rgb(245, 250, 255));
         } else {
@@ -1986,6 +2072,7 @@ internal static class Program {
             WritePanelLine(width, panelWidth, "  R2 / L2", "R2: m w j x q f p b    L2: k v 1 2 3 4 5 6", new Rgb(190, 133, 255), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  Combo layers", "R1+R2: 7 8 9 0 - = , .    L1+L2: ' / ; [ ] \\ `", new Rgb(255, 169, 85), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  Combo window", "R1/R2 or L1/L2 must pair within " + config.ComboLayerWindowMs.ToString(CultureInfo.InvariantCulture) + "ms; later overlaps use the newest single layer", new Rgb(126, 226, 244), new Rgb(245, 250, 255));
+            WritePanelLine(width, panelWidth, "  Layer settle", "Action waits " + config.ActionLayerGraceMs.ToString(CultureInfo.InvariantCulture) + "ms; newer single layer can take over", SeasonSummer(), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  Clutch", xbox ? "Hold either View/Back or Menu/Start for touchpad charge" : "Hold the DualSense touchpad for touchpad charge", new Rgb(113, 255, 194), new Rgb(245, 250, 255));
             WritePanelLine(width, panelWidth, "  Fn", "Left stick UpRight + 1..0,-,= => F1..F12", new Rgb(255, 255, 255), new Rgb(245, 250, 255));
         }
@@ -2930,12 +3017,72 @@ internal static class Program {
         PrintResolutionCheck(config, m, "L1+L2 then R2 + Up", true, false, true, true, 10, 0, 20, 30, ActionButton.Up);
         PrintResolutionCheck(config, m, "R1 then L1 + Square", true, true, false, false, 20, 10, 0, 0, ActionButton.Square);
         PrintResolutionCheck(config, m, "L2 then R2 + Square", false, false, true, true, 0, 0, 10, 20, ActionButton.Square);
+        Console.WriteLine();
+        PrintPendingTimingChecks(config, m);
     }
 
     private static void PrintResolutionCheck(Config config, MappingEngine mapping, string label, bool l1, bool r1, bool l2, bool r2, double l1Ms, double r1Ms, double l2Ms, double r2Ms, ActionButton action) {
         Layer layer = mapping.Resolve(l1, r1, l2, r2, l1Ms, r1Ms, l2Ms, r2Ms, config.ComboLayerWindowMs);
         PhysicalKey key = mapping.Lookup(layer, action);
         Console.WriteLine(label + " = " + LayerDisplayName(layer) + " / " + LayerTestKeyName(key));
+    }
+
+    private static void PrintPendingTimingChecks(Config config, MappingEngine mapping) {
+        Console.WriteLine("Pending timing checks:");
+        bool ok = true;
+        ok = PrintCrossTakeoverCheck(config, mapping) && ok;
+        ok = PrintControllerParityCheck(config, mapping) && ok;
+        Console.WriteLine("Pending timing result = " + (ok ? "PASS" : "FAIL"));
+        if (!ok) Environment.ExitCode = 1;
+    }
+
+    private static bool PrintCrossTakeoverCheck(Config config, MappingEngine mapping) {
+        double l1Ms = 0.0;
+        double upMs = 0.0;
+        double crossMs = upMs + 100.0;
+        double r1Ms = crossMs + 70.0;
+
+        Layer firstLayer = mapping.Resolve(true, false, false, false, l1Ms, 0, 0, 0, config.ComboLayerWindowMs);
+        PhysicalKey firstKey = mapping.Lookup(firstLayer, ActionButton.Up);
+        Layer crossStartLayer = mapping.Resolve(true, false, false, false, l1Ms, 0, 0, 0, config.ComboLayerWindowMs);
+        Layer afterR1Layer = mapping.Resolve(true, true, false, false, l1Ms, r1Ms, 0, 0, config.ComboLayerWindowMs);
+        Layer settledLayer = MapperForm.ResolvePendingLayer(crossStartLayer, l1Ms, false, crossMs, afterR1Layer, r1Ms);
+        PhysicalKey settledKey = mapping.Lookup(settledLayer, ActionButton.Cross);
+
+        bool firstSettled = crossMs - upMs >= config.ActionLayerGraceMs;
+        bool r1WithinGrace = r1Ms - crossMs <= config.ActionLayerGraceMs;
+        bool ok = firstSettled
+            && r1WithinGrace
+            && firstLayer == Layer.L1
+            && firstKey == PhysicalKey.S
+            && crossStartLayer == Layer.L1
+            && afterR1Layer == Layer.R1
+            && settledLayer == Layer.R1
+            && settledKey == PhysicalKey.H;
+
+        Console.WriteLine("L1+Up -> s, then Cross + R1 after 70ms while L1 held = " +
+                          LayerDisplayName(settledLayer) + " / " + LayerTestKeyName(settledKey) +
+                          (ok ? " [PASS]" : " [FAIL]"));
+        return ok;
+    }
+
+    private static bool PrintControllerParityCheck(Config config, MappingEngine mapping) {
+        ControllerProfile[] profiles = new ControllerProfile[] {
+            ControllerProfile.DualSense,
+            ControllerProfile.Xbox360,
+            ControllerProfile.XboxSeries
+        };
+        bool ok = true;
+        for (int i = 0; i < profiles.Length; i++) {
+            Layer layer = mapping.Resolve(false, true, false, false, 0, 10, 0, 0, config.ComboLayerWindowMs);
+            PhysicalKey key = mapping.Lookup(layer, ActionButton.Cross);
+            bool profileOk = layer == Layer.R1 && key == PhysicalKey.H;
+            string actionName = profiles[i] == ControllerProfile.DualSense ? "Cross" : "A";
+            Console.WriteLine(ControllerProfileName(profiles[i]) + " R1/RB + " + actionName + " = " +
+                              LayerTestKeyName(key) + (profileOk ? " [PASS]" : " [FAIL]"));
+            ok = profileOk && ok;
+        }
+        return ok;
     }
 
     private static void PrintMouseTest(Config config) {
