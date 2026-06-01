@@ -224,6 +224,19 @@ To tune how long the first shoulder/trigger can claim a base action button, edit
 | `triggerPressThreshold` | 0.35 | L2/R2 press threshold. |
 | `triggerReleaseThreshold` | 0.25 | L2/R2 release threshold. Keep this lower than press threshold for hysteresis. |
 
+## Interception Kernel Driver Mode (Bypassing VM and Game Input Blocks)
+
+By default, ShikiPad uses Windows `SendInput` to inject virtual keystrokes. However, this is often blocked by virtual machines (VMware, VirtualBox) and some games with low-level anti-cheat systems.
+
+To solve this, ShikiPad integrates the **Interception** driver to inject hardware-level scan codes and mouse signals directly at the OS driver level.
+
+### How to Enable:
+
+1. Double click `install_driver.bat` or run `install-interception.exe /install` in an administrator command prompt.
+2. **You must restart your computer** for the driver to take effect.
+3. Ensure `useInterception` is set to `true` in `shikipad.json` (it is `true` by default).
+4. Restart ShikiPad. Your controller input will now work seamlessly across all VMs and games.
+
 ## Where to Change Code
 
 Most users should only edit `shikipad.json`. Recompile only if you want to change mappings or state-machine behavior.

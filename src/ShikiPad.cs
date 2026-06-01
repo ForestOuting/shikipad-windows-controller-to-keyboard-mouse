@@ -85,6 +85,7 @@ internal sealed class Config {
     public int ActionLayerSwitchGuardMs = 120;
     public int ComboLayerWindowMs = 100;
     public bool UseScanCode = true;
+    public bool UseInterception = true;
     public int ScrollSlowIntervalMs = 100;
     public int ScrollFastIntervalMs = 20;
     public int R3FreezeMs = 60;
@@ -129,6 +130,7 @@ internal sealed class Config {
             cfg.ActionLayerSwitchGuardMs = GetInt(text, "actionLayerSwitchGuardMs", cfg.ActionLayerSwitchGuardMs);
             cfg.ComboLayerWindowMs = GetInt(text, "comboLayerWindowMs", cfg.ComboLayerWindowMs);
             cfg.UseScanCode = GetBool(text, "useScanCode", cfg.UseScanCode);
+            cfg.UseInterception = GetBool(text, "useInterception", cfg.UseInterception);
             cfg.ScrollSlowIntervalMs = GetInt(text, "scrollSlowIntervalMs", cfg.ScrollSlowIntervalMs);
             cfg.ScrollFastIntervalMs = GetInt(text, "scrollFastIntervalMs", cfg.ScrollFastIntervalMs);
             cfg.R3FreezeMs = GetInt(text, "r3FreezeMs", cfg.R3FreezeMs);
@@ -215,6 +217,7 @@ internal sealed class Config {
         Write(sb, "actionLayerSwitchGuardMs", ActionLayerSwitchGuardMs, true);
         Write(sb, "comboLayerWindowMs", ComboLayerWindowMs, true);
         Write(sb, "useScanCode", UseScanCode, true);
+        Write(sb, "useInterception", UseInterception, true);
         Write(sb, "scrollSlowIntervalMs", ScrollSlowIntervalMs, true);
         Write(sb, "scrollFastIntervalMs", ScrollFastIntervalMs, true);
         Write(sb, "r3FreezeMs", R3FreezeMs, true);
@@ -373,6 +376,8 @@ internal sealed class InputInjector {
     private readonly KeyDef _alt;
     private readonly KeyDef _win;
     private readonly bool _useScanCode;
+    private readonly bool _useInterception;
+    private readonly bool _interceptionAvailable;
     private bool _leftMouseHeld;
     private bool _rightMouseHeld;
 
@@ -381,8 +386,17 @@ internal sealed class InputInjector {
     public string CurrentSource = "Unknown";
     public string CurrentReason = "";
 
-    public InputInjector(bool useScanCode) {
+    public InputInjector(bool useScanCode, bool useInterception) {
         _useScanCode = useScanCode;
+        _useInterception = useInterception;
+        if (_useInterception) {
+            _interceptionAvailable = InterceptionDriver.Initialize();
+            if (_interceptionAvailable) {
+                Logger.Info("Interception driver initialized successfully.");
+            } else {
+                Logger.Warn("Interception driver not found or failed to initialize. Falling back to SendInput.");
+            }
+        }
         InitKeys();
         _shift = Resolve(0xA0, false);
         _ctrl = Resolve(0xA2, false);
@@ -605,12 +619,14 @@ internal sealed class InputInjector {
         INPUT input = new INPUT();
         input.type = INPUT_KEYBOARD;
         KEYBDINPUT keyboard = new KEYBDINPUT();
+
+        // We always populate wScan so Interception can read it later in Send.
+        // SendInput ignores wScan if KEYEVENTF_SCANCODE is not set, which it isn't.
         keyboard.wVk = key.Vk;
-        keyboard.wScan = 0; // Completely disable scan codes across the board
+        keyboard.wScan = key.Scan; 
         keyboard.dwFlags = up ? KEYEVENTF_KEYUP : 0;
         
         // No KEYEVENTF_SCANCODE at all
-        
         if (key.Extended) keyboard.dwFlags |= KEYEVENTF_EXTENDEDKEY;
         input.ki = keyboard;
         inputs.Add(input);
@@ -625,7 +641,6 @@ internal sealed class InputInjector {
         input.mi = mouse;
         inputs.Add(input);
     }
-
     private void Send(List<INPUT> inputs, string actionType) {
         if (inputs.Count == 0) return;
         if (TraceInput || TraceSendinput) {
@@ -634,7 +649,36 @@ internal sealed class InputInjector {
             Console.WriteLine(log);
         }
         if (!TraceInput) {
-            SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+            if (_useInterception && _interceptionAvailable) {
+                foreach (var input in inputs) {
+                    if (input.type == INPUT_KEYBOARD) {
+                        InterceptionDriver.KeyState state;
+                        if ((input.ki.dwFlags & KEYEVENTF_KEYUP) != 0) {
+                            state = (input.ki.dwFlags & KEYEVENTF_EXTENDEDKEY) != 0 ? (InterceptionDriver.KeyState.E0 | InterceptionDriver.KeyState.Up) : InterceptionDriver.KeyState.Up;
+                        } else {
+                            state = (input.ki.dwFlags & KEYEVENTF_EXTENDEDKEY) != 0 ? (InterceptionDriver.KeyState.E0 | InterceptionDriver.KeyState.Down) : InterceptionDriver.KeyState.Down;
+                        }
+                        InterceptionDriver.SendKey(input.ki.wScan, state);
+                    } else if (input.type == INPUT_MOUSE) {
+                        if ((input.mi.dwFlags & MOUSEEVENTF_MOVE) != 0) {
+                            InterceptionDriver.SendMouseDelta(input.mi.dx, input.mi.dy);
+                        } else if ((input.mi.dwFlags & MOUSEEVENTF_WHEEL) != 0) {
+                            InterceptionDriver.SendMouseWheel(input.mi.mouseData);
+                        } else {
+                            InterceptionDriver.MouseState state = 0;
+                            if ((input.mi.dwFlags & MOUSEEVENTF_LEFTDOWN) != 0) state |= InterceptionDriver.MouseState.LeftButtonDown;
+                            if ((input.mi.dwFlags & MOUSEEVENTF_LEFTUP) != 0) state |= InterceptionDriver.MouseState.LeftButtonUp;
+                            if ((input.mi.dwFlags & MOUSEEVENTF_RIGHTDOWN) != 0) state |= InterceptionDriver.MouseState.RightButtonDown;
+                            if ((input.mi.dwFlags & MOUSEEVENTF_RIGHTUP) != 0) state |= InterceptionDriver.MouseState.RightButtonUp;
+                            if (state != 0) {
+                                InterceptionDriver.SendMouse(state);
+                            }
+                        }
+                    }
+                }
+            } else {
+                SendInput((uint)inputs.Count, inputs.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+            }
         }
     }
 
@@ -1151,6 +1195,7 @@ internal sealed class MapperForm : Form {
     private double _touchStartX;
     private double _touchStartY;
     private double _touchLastX;
+
     private double _touchLastY;
     private double _touchStartMs;
     private double _lastTickMs;
@@ -1162,7 +1207,7 @@ internal sealed class MapperForm : Form {
         _debugAltTab = debugAltTab;
         _debugSources = debugSources;
         _enabled = config.Enabled;
-        _injector = new InputInjector(config.UseScanCode);
+        _injector = new InputInjector(config.UseScanCode, config.UseInterception);
         _injector.TraceInput = traceInput;
         _injector.TraceSendinput = traceSendinput;
         ShowInTaskbar = false;
@@ -3215,7 +3260,7 @@ internal static class Program {
     private static void RunSelfTest(Config config) {
         Console.WriteLine("Focus Notepad. Typing starts in 2 seconds.");
         Thread.Sleep(2000);
-        InputInjector i = new InputInjector(config.UseScanCode);
+        InputInjector i = new InputInjector(config.UseScanCode, config.UseInterception);
         PhysicalKey[] keys = new PhysicalKey[] {
             PhysicalKey.A, PhysicalKey.I, PhysicalKey.N, PhysicalKey.T, PhysicalKey.S,
             PhysicalKey.Num1, PhysicalKey.Num2, PhysicalKey.Num9, PhysicalKey.Num0,
@@ -3233,7 +3278,7 @@ internal static class Program {
     private static void RunShiftTest(Config config) {
         Console.WriteLine("Focus Notepad. Typing starts in 2 seconds.");
         Thread.Sleep(2000);
-        InputInjector i = new InputInjector(config.UseScanCode);
+        InputInjector i = new InputInjector(config.UseScanCode, config.UseInterception);
         PhysicalKey[] keys = new PhysicalKey[] {
             PhysicalKey.A, PhysicalKey.Num1, PhysicalKey.Num9, PhysicalKey.Num0,
             PhysicalKey.Comma, PhysicalKey.Period, PhysicalKey.Minus, PhysicalKey.Equals,
