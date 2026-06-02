@@ -1029,17 +1029,6 @@ internal sealed class DirectHidController {
 
 
 
-    private static bool IsPlayStation(string name) {
-        string n = name.ToUpperInvariant();
-        return n.IndexOf("VID_054C", StringComparison.Ordinal) >= 0;
-    }
-
-    private static bool IsDualSense(string name) {
-        string n = name.ToUpperInvariant();
-        return n.IndexOf("PID_0CE6", StringComparison.Ordinal) >= 0 ||
-               n.IndexOf("PID_0DF2", StringComparison.Ordinal) >= 0;
-    }
-
     private static bool HasKnownTouchpad(string name) {
         string n = name.ToUpperInvariant();
         return n.IndexOf("PID_05C4", StringComparison.Ordinal) >= 0 ||
@@ -1057,13 +1046,7 @@ internal sealed class DirectHidController {
     private static double Trigger(byte value) { return Clamp((double)value / 255.0, 0.0, 1.0); }
     private static double Clamp(double value, double min, double max) { return value < min ? min : (value > max ? max : value); }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RAWINPUTDEVICE {
-        public ushort usUsagePage;
-        public ushort usUsage;
-        public uint dwFlags;
-        public IntPtr hwndTarget;
-    }
+
 
 internal static class NativeMethods {
         [DllImport("hid.dll", SetLastError = true)] public static extern void HidD_GetHidGuid(out Guid hidGuid);
@@ -1988,12 +1971,6 @@ internal sealed class MapperForm : Form {
         Logger.Info(message);
         Console.WriteLine(message);
     }
-
-    private static double AngleDegrees(double x, double y) {
-        return Math.Atan2(-y, x) * 180.0 / Math.PI;
-    }
-
-
 
 
     private static double Clamp(double value, double min, double max) { return value < min ? min : (value > max ? max : value); }

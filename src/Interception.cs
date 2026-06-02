@@ -2,11 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 
 public static class InterceptionDriver {
-    public const int INTERCEPTION_KEYBOARD = 1;
-    public const int INTERCEPTION_MOUSE = 2;
 
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    public delegate int InterceptionPredicate(int device);
 
     public enum KeyState : ushort {
         Down = 0x00,
@@ -59,14 +55,12 @@ public static class InterceptionDriver {
     [DllImport("interception.dll", CallingConvention = CallingConvention.Cdecl)]
     public static extern IntPtr interception_create_context();
 
-    [DllImport("interception.dll", CallingConvention = CallingConvention.Cdecl)]
-    public static extern void interception_destroy_context(IntPtr context);
+
 
     [DllImport("interception.dll", CallingConvention = CallingConvention.Cdecl)]
     public static extern int interception_send(IntPtr context, int device, ref InterceptionStroke stroke, uint num_strokes);
     
-    [DllImport("interception.dll", CallingConvention = CallingConvention.Cdecl)]
-    public static extern int interception_send(IntPtr context, int device, InterceptionStroke[] stroke, uint num_strokes);
+
 
     // Hardcoded device IDs for injection
     // Device 1 is the first keyboard, Device 11 is the first mouse
