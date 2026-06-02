@@ -100,8 +100,10 @@ ShikiPad 是一个在 Windows 上将 DualSense (PS5手柄)、Xbox 360 和 Xbox S
 最常用的几项配置说明：
 - `mouseMaxSpeed`: 鼠标移动的最大速度。
 - `rightStickCurveExponent`: 右摇杆的曲线指数（调大能让轻推更精准，重推依然快）。
+- `rightStickDeadzone`: 右摇杆死区（默认 `0.03`，如果你觉得静止时鼠标会漂移可以改大）。
 - `useInterception`: 是否使用底层驱动（默认为 `true`，如果没有安装驱动会自动降级回普通模式）。
 - `actionLayerGraceMs`: 打字防误触延迟（默认 `80` 毫秒）。如果你总是想打字母却打出了空格/回车，可以适当把这个值改大（如 `100` 或 `120`）。
+- `layerTakeoverWindowMs`: 后按下的肩键/扳机键可接管的时间窗口（默认 `50` 毫秒）。如果由于肩键按得比动作键晚导致字母打错，可以稍微调大。
 
 ## 💡 提示：双重输入问题
 如果你玩的游戏同时支持手柄和键盘，此时你的手柄既会发出原始手柄信号，又会发出 ShikiPad 的键盘信号。

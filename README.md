@@ -102,8 +102,10 @@ If you want to tweak mouse sensitivity or typing delays, you can edit the `shiki
 Common settings you might want to change:
 - `mouseMaxSpeed`: Maximum mouse cursor speed.
 - `rightStickCurveExponent`: Stick acceleration curve (higher values make fine movements more precise).
+- `rightStickDeadzone`: Right stick deadzone (Default `0.03`. Increase this if the mouse drifts when idle).
 - `useInterception`: Whether to use the kernel driver (Defaults to `true`. If the driver isn't installed, it safely falls back to normal Windows input).
 - `actionLayerGraceMs`: Typing typo-prevention delay (Default `80` ms). If you keep accidentally typing a Space or Enter when you meant to type a letter, increase this value to `100` or `120`.
+- `layerTakeoverWindowMs`: Grace window for a later-pressed shoulder/trigger to override an already-pressed action button (Default `50` ms).
 
 ## 💡 Tip: Double Input Issue
 If you play a game that natively supports controllers, the game might receive both the raw gamepad input *and* ShikiPad's keyboard input at the same time.

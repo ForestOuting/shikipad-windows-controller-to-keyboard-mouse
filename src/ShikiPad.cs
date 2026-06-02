@@ -66,7 +66,7 @@ internal sealed class Config {
     public bool Enabled = true;
     public double MouseSensitivity = 1.0;
     public double MouseMaxSpeed = 28.0;
-    public double RightStickDeadzone = 0.0;
+    public double RightStickDeadzone = 0.03;
     public string RightStickCurve = "power";
     public double RightStickCurveExponent = 2.2;
     public double RightStickEpsilon = 0.002;
@@ -81,7 +81,7 @@ internal sealed class Config {
     public int BaseRepeatSlowIntervalMs = 160;
     public int BaseRepeatRampMs = 1200;
     public int ActionLayerGraceMs = 80;
-    public int LayerTakeoverWindowMs = 35;
+    public int LayerTakeoverWindowMs = 50;
     public int ActionLayerSwitchGuardMs = 120;
     public int ComboLayerWindowMs = 80;
     public bool UseScanCode = true;
@@ -135,11 +135,7 @@ internal sealed class Config {
             cfg.ScrollFastIntervalMs = GetInt(text, "scrollFastIntervalMs", cfg.ScrollFastIntervalMs);
             cfg.R3FreezeMs = GetInt(text, "r3FreezeMs", cfg.R3FreezeMs);
             
-            if (cfg.RightStickDeadzone != 0.0) {
-                Logger.Info("migrating rightStickDeadzone from " + cfg.RightStickDeadzone.ToString(CultureInfo.InvariantCulture) + " to 0.0");
-                cfg.RightStickDeadzone = 0.0;
-                shouldSaveMigratedConfig = true;
-            }
+
             if (!String.Equals(cfg.RightStickCurve, "power", StringComparison.Ordinal)) {
                 Logger.Warn("unsupported rightStickCurve '" + cfg.RightStickCurve + "'; using power");
                 cfg.RightStickCurve = "power";
@@ -164,7 +160,7 @@ internal sealed class Config {
                 shouldSaveMigratedConfig = true;
             }
             if (cfg.LayerTakeoverWindowMs < 0 || cfg.LayerTakeoverWindowMs > cfg.ActionLayerGraceMs) {
-                int fallbackLayerTakeoverMs = Math.Min(35, Math.Max(0, cfg.ActionLayerGraceMs));
+                int fallbackLayerTakeoverMs = Math.Min(50, Math.Max(0, cfg.ActionLayerGraceMs));
                 Logger.Warn("invalid layerTakeoverWindowMs; using " + fallbackLayerTakeoverMs.ToString(CultureInfo.InvariantCulture));
                 cfg.LayerTakeoverWindowMs = fallbackLayerTakeoverMs;
                 shouldSaveMigratedConfig = true;
@@ -1852,13 +1848,15 @@ internal sealed class MapperForm : Form {
 
         double actualRadius = Math.Sqrt(cx * cx + cy * cy);
         double radius = Clamp(actualRadius, 0.0, 1.0);
-        if (radius <= _config.RightStickEpsilon) {
+        if (radius <= _config.RightStickDeadzone) {
             return;
         }
 
+        double normalizedRadius = (radius - _config.RightStickDeadzone) / (1.0 - _config.RightStickDeadzone);
+
         double dirX = cx / actualRadius;
         double dirY = cy / actualRadius;
-        double speedRatio = Math.Pow(radius, _config.RightStickCurveExponent);
+        double speedRatio = Math.Pow(normalizedRadius, _config.RightStickCurveExponent);
         double speed = _config.MouseMaxSpeed * deltaSec * 120.0 * _config.MouseSensitivity;
         double dx = dirX * speedRatio * speed;
         double dy = dirY * speedRatio * speed;
