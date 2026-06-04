@@ -827,6 +827,10 @@ internal sealed class DirectHidController {
     }
 
     private void ParseXInput(NativeMethods.XINPUT_GAMEPAD gamepad) {
+        State = ParseXInputState(gamepad);
+    }
+
+    internal static ControllerState ParseXInputState(NativeMethods.XINPUT_GAMEPAD gamepad) {
         ControllerState s = new ControllerState();
         s.Connected = true;
         ushort b = gamepad.wButtons;
@@ -853,7 +857,7 @@ internal sealed class DirectHidController {
         s.Options = (b & NativeMethods.XINPUT_GAMEPAD_START) != 0;
 
         s.TouchClick = s.Create || s.Options;
-        State = s;  // Atomic publish: all fields are complete before reference becomes visible
+        return s;
     }
 
 
@@ -915,9 +919,16 @@ internal sealed class DirectHidController {
 
 
     private void ParseReport(byte[] r) {
-        if (r.Length < 10 || r[0] != 0x01) return;
+        ControllerState s;
+        if (!TryParseDualSenseReport(r, out s)) return;
+        State = s;  // Atomic publish: all fields are complete before reference becomes visible
+    }
 
-        ControllerState s = new ControllerState();
+    internal static bool TryParseDualSenseReport(byte[] r, out ControllerState s) {
+        s = null;
+        if (r == null || r.Length < 10 || r[0] != 0x01) return false;
+
+        s = new ControllerState();
         s.Connected = true;
 
         s.LX = Axis(r[1]);
@@ -948,7 +959,7 @@ internal sealed class DirectHidController {
         s.L3 = (b2 & 0x40) != 0;
         s.R3 = (b2 & 0x80) != 0;
 
-        State = s;  // Atomic publish: all fields are complete before reference becomes visible
+        return true;
     }
 
     private static void FillDpadAndFace(ControllerState s, byte b) {
@@ -2598,6 +2609,10 @@ internal static class Program {
             PrintLeftStickTest(config);
             return 0;
         }
+        if (HasArg(args, "--clutch-test")) {
+            PrintClutchTest();
+            return Environment.ExitCode;
+        }
         if (HasArg(args, "--shift-test")) {
             RunShiftTest(config);
             return 0;
@@ -2949,6 +2964,51 @@ internal static class Program {
         SimulateLeftStickLatch(config, ref latched, "jitter toward Down while held", 0.0, 1.0);
         SimulateLeftStickLatch(config, ref latched, "jitter toward Right while held", 1.0, 0.0);
         SimulateLeftStickLatch(config, ref latched, "release below exit", 0.1, 0.1);
+    }
+
+    private static void PrintClutchTest() {
+        bool ok = true;
+
+        byte[] dualSensePressed = NeutralDualSenseReport();
+        dualSensePressed[10] = 0x02;
+        ControllerState dualSensePressedState;
+        bool parsedPressed = DirectHidController.TryParseDualSenseReport(dualSensePressed, out dualSensePressedState);
+        ok = PrintClutchCheck("DualSense touchpad press = clutch", parsedPressed && dualSensePressedState.TouchClick) && ok;
+
+        byte[] dualSenseReleased = NeutralDualSenseReport();
+        ControllerState dualSenseReleasedState;
+        bool parsedReleased = DirectHidController.TryParseDualSenseReport(dualSenseReleased, out dualSenseReleasedState);
+        ok = PrintClutchCheck("DualSense touchpad released = no clutch", parsedReleased && !dualSenseReleasedState.TouchClick) && ok;
+
+        NativeMethods.XINPUT_GAMEPAD xboxBack = new NativeMethods.XINPUT_GAMEPAD();
+        xboxBack.wButtons = NativeMethods.XINPUT_GAMEPAD_BACK;
+        ok = PrintClutchCheck("Xbox View/Back = clutch", DirectHidController.ParseXInputState(xboxBack).TouchClick) && ok;
+
+        NativeMethods.XINPUT_GAMEPAD xboxStart = new NativeMethods.XINPUT_GAMEPAD();
+        xboxStart.wButtons = NativeMethods.XINPUT_GAMEPAD_START;
+        ok = PrintClutchCheck("Xbox Menu/Start = clutch", DirectHidController.ParseXInputState(xboxStart).TouchClick) && ok;
+
+        NativeMethods.XINPUT_GAMEPAD xboxReleased = new NativeMethods.XINPUT_GAMEPAD();
+        ok = PrintClutchCheck("Xbox View/Menu released = no clutch", !DirectHidController.ParseXInputState(xboxReleased).TouchClick) && ok;
+
+        Console.WriteLine("Clutch mapping result = " + (ok ? "PASS" : "FAIL"));
+        if (!ok) Environment.ExitCode = 1;
+    }
+
+    private static byte[] NeutralDualSenseReport() {
+        byte[] report = new byte[11];
+        report[0] = 0x01;
+        report[1] = 128;
+        report[2] = 128;
+        report[3] = 128;
+        report[4] = 128;
+        report[8] = 0x08;
+        return report;
+    }
+
+    private static bool PrintClutchCheck(string label, bool passed) {
+        Console.WriteLine(label + (passed ? " [PASS]" : " [FAIL]"));
+        return passed;
     }
 
     private static void PrintLeftStickSample(Config config, string label, double x, double y) {
