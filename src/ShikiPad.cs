@@ -170,6 +170,11 @@ internal sealed class Config {
                 cfg.LayerTakeoverWindowMs = fallbackLayerTakeoverMs;
                 shouldSaveMigratedConfig = true;
             }
+            if (cfg.LayerTakeoverWindowMs < cfg.ActionLayerGraceMs) {
+                Logger.Info("migrating layerTakeoverWindowMs from " + cfg.LayerTakeoverWindowMs.ToString(CultureInfo.InvariantCulture) + " to " + cfg.ActionLayerGraceMs.ToString(CultureInfo.InvariantCulture));
+                cfg.LayerTakeoverWindowMs = cfg.ActionLayerGraceMs;
+                shouldSaveMigratedConfig = true;
+            }
             if (cfg.ComboLayerWindowMs < 0 || cfg.ComboLayerWindowMs > 500) {
                 Logger.Warn("invalid comboLayerWindowMs; using 80");
                 cfg.ComboLayerWindowMs = 80;
@@ -1454,9 +1459,7 @@ internal sealed class MapperForm : Form {
                 if (!curr && !hold.PendingReleased) {
                     hold.PendingReleased = true;
                 }
-                if (curr) {
-                    UpdatePendingLayer(ref hold, layer, layerMs);
-                }
+                UpdatePendingLayer(ref hold, layer, layerMs);
 
                 bool shouldFlushPending = now - hold.PendingSinceMs >= _config.ActionLayerGraceMs;
                 if (!shouldFlushPending) {
