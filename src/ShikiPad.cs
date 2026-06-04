@@ -748,6 +748,20 @@ internal sealed class ControllerState {
     public bool TouchActive;
       public bool TouchClick;
     public double TouchX, TouchY;
+
+    public ControllerState Snapshot() {
+        ControllerState c = new ControllerState();
+        c.Connected = Connected;
+        c.TouchpadAvailable = TouchpadAvailable;
+        c.LX = LX; c.LY = LY; c.RX = RX; c.RY = RY; c.L2 = L2; c.R2 = R2;
+        c.Up = Up; c.Right = Right; c.Down = Down; c.Left = Left;
+        c.Square = Square; c.Triangle = Triangle; c.Cross = Cross; c.Circle = Circle;
+        c.L1 = L1; c.R1 = R1; c.L3 = L3; c.R3 = R3;
+        c.Options = Options; c.Create = Create;
+        c.TouchActive = TouchActive; c.TouchClick = TouchClick;
+        c.TouchX = TouchX; c.TouchY = TouchY;
+        return c;
+    }
 }
 
 internal sealed class DirectHidController {
@@ -1215,7 +1229,7 @@ internal sealed class MapperForm : Form {
     private double _l1DownMs, _r1DownMs, _l2DownMs, _r2DownMs;
 
     private void OnTick(object sender, EventArgs e) {
-        ControllerState s = _hid.State;
+        ControllerState s = _hid.State.Snapshot();
         double now = NowMs();
         double deltaSec = Math.Max(0.0, (now - _lastTickMs) / 1000.0);
         _lastTickMs = now;
