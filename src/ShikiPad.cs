@@ -751,26 +751,12 @@ internal sealed class ControllerState {
     public bool Up, Right, Down, Left, Square, Triangle, Cross, Circle;
     public bool L1, R1, L3, R3, Options, Create;
     public bool TouchActive;
-      public bool TouchClick;
+    public bool TouchClick;
     public double TouchX, TouchY;
-
-    public ControllerState Snapshot() {
-        ControllerState c = new ControllerState();
-        c.Connected = Connected;
-        c.TouchpadAvailable = TouchpadAvailable;
-        c.LX = LX; c.LY = LY; c.RX = RX; c.RY = RY; c.L2 = L2; c.R2 = R2;
-        c.Up = Up; c.Right = Right; c.Down = Down; c.Left = Left;
-        c.Square = Square; c.Triangle = Triangle; c.Cross = Cross; c.Circle = Circle;
-        c.L1 = L1; c.R1 = R1; c.L3 = L3; c.R3 = R3;
-        c.Options = Options; c.Create = Create;
-        c.TouchActive = TouchActive; c.TouchClick = TouchClick;
-        c.TouchX = TouchX; c.TouchY = TouchY;
-        return c;
-    }
 }
 
 internal sealed class DirectHidController {
-    public readonly ControllerState State = new ControllerState();
+    public volatile ControllerState State = new ControllerState();
     private readonly ControllerProfile _profile;
     private Thread _thread;
     private volatile bool _running;
@@ -822,12 +808,14 @@ internal sealed class DirectHidController {
         byte[] buffer = new byte[1024];
         while (_running) {
             if (_handle == IntPtr.Zero || _handle == new IntPtr(-1)) {
-                State.Connected = false;
+                State = new ControllerState();
                 _handle = FindAndOpenDevice();
                 if (_handle != IntPtr.Zero && _handle != new IntPtr(-1)) {
-                    State.Connected = true;
+                    ControllerState cs = new ControllerState();
+                    cs.Connected = true;
+                    cs.TouchpadAvailable = HasKnownTouchpad(_deviceName);
+                    State = cs;
                     Logger.Info("Direct HID device connected: " + _deviceName);
-                    State.TouchpadAvailable = HasKnownTouchpad(_deviceName);
                 } else {
                     Thread.Sleep(1000);
                     continue;
@@ -854,22 +842,23 @@ internal sealed class DirectHidController {
     }
 
     private void XInputLoop() {
+        bool wasConnected = false;
         while (_running) {
             NativeMethods.XINPUT_STATE state;
             int result = XInputGetState(ref _xinputUserIndex, out state);
             if (result == 0) {
-                if (!State.Connected) {
-                    State.Connected = true;
+                if (!wasConnected) {
+                    wasConnected = true;
                     Logger.Info("XInput controller connected: " + DisplayName + " slot " + _xinputUserIndex.ToString(CultureInfo.InvariantCulture));
                 }
                 ParseXInput(state.Gamepad);
                 Thread.Sleep(1);
             } else {
-                if (State.Connected) {
+                if (wasConnected) {
                     Logger.Warn("XInput controller disconnected");
-                    ClearControllerState();
+                    wasConnected = false;
                 }
-                State.Connected = false;
+                State = new ControllerState();
                 _xinputUserIndex = -1;
                 Thread.Sleep(1000);
             }
@@ -895,40 +884,39 @@ internal sealed class DirectHidController {
     }
 
     private void ParseXInput(NativeMethods.XINPUT_GAMEPAD gamepad) {
+        ControllerState s = new ControllerState();
+        s.Connected = true;
         ushort b = gamepad.wButtons;
-        State.LX = Axis(gamepad.sThumbLX);
-        State.LY = -Axis(gamepad.sThumbLY);
-        State.RX = Axis(gamepad.sThumbRX);
-        State.RY = -Axis(gamepad.sThumbRY);
-        State.L2 = Trigger(gamepad.bLeftTrigger);
-        State.R2 = Trigger(gamepad.bRightTrigger);
+        s.LX = Axis(gamepad.sThumbLX);
+        s.LY = -Axis(gamepad.sThumbLY);
+        s.RX = Axis(gamepad.sThumbRX);
+        s.RY = -Axis(gamepad.sThumbRY);
+        s.L2 = Trigger(gamepad.bLeftTrigger);
+        s.R2 = Trigger(gamepad.bRightTrigger);
 
-        State.Up = (b & NativeMethods.XINPUT_GAMEPAD_DPAD_UP) != 0;
-        State.Down = (b & NativeMethods.XINPUT_GAMEPAD_DPAD_DOWN) != 0;
-        State.Left = (b & NativeMethods.XINPUT_GAMEPAD_DPAD_LEFT) != 0;
-        State.Right = (b & NativeMethods.XINPUT_GAMEPAD_DPAD_RIGHT) != 0;
-        State.Square = (b & NativeMethods.XINPUT_GAMEPAD_X) != 0;
-        State.Cross = (b & NativeMethods.XINPUT_GAMEPAD_A) != 0;
-        State.Circle = (b & NativeMethods.XINPUT_GAMEPAD_B) != 0;
-        State.Triangle = (b & NativeMethods.XINPUT_GAMEPAD_Y) != 0;
-        State.L1 = (b & NativeMethods.XINPUT_GAMEPAD_LEFT_SHOULDER) != 0;
-        State.R1 = (b & NativeMethods.XINPUT_GAMEPAD_RIGHT_SHOULDER) != 0;
-        State.L3 = (b & NativeMethods.XINPUT_GAMEPAD_LEFT_THUMB) != 0;
-        State.R3 = (b & NativeMethods.XINPUT_GAMEPAD_RIGHT_THUMB) != 0;
-        State.Create = (b & NativeMethods.XINPUT_GAMEPAD_BACK) != 0;
-        State.Options = (b & NativeMethods.XINPUT_GAMEPAD_START) != 0;
+        s.Up = (b & NativeMethods.XINPUT_GAMEPAD_DPAD_UP) != 0;
+        s.Down = (b & NativeMethods.XINPUT_GAMEPAD_DPAD_DOWN) != 0;
+        s.Left = (b & NativeMethods.XINPUT_GAMEPAD_DPAD_LEFT) != 0;
+        s.Right = (b & NativeMethods.XINPUT_GAMEPAD_DPAD_RIGHT) != 0;
+        s.Square = (b & NativeMethods.XINPUT_GAMEPAD_X) != 0;
+        s.Cross = (b & NativeMethods.XINPUT_GAMEPAD_A) != 0;
+        s.Circle = (b & NativeMethods.XINPUT_GAMEPAD_B) != 0;
+        s.Triangle = (b & NativeMethods.XINPUT_GAMEPAD_Y) != 0;
+        s.L1 = (b & NativeMethods.XINPUT_GAMEPAD_LEFT_SHOULDER) != 0;
+        s.R1 = (b & NativeMethods.XINPUT_GAMEPAD_RIGHT_SHOULDER) != 0;
+        s.L3 = (b & NativeMethods.XINPUT_GAMEPAD_LEFT_THUMB) != 0;
+        s.R3 = (b & NativeMethods.XINPUT_GAMEPAD_RIGHT_THUMB) != 0;
+        s.Create = (b & NativeMethods.XINPUT_GAMEPAD_BACK) != 0;
+        s.Options = (b & NativeMethods.XINPUT_GAMEPAD_START) != 0;
 
-        State.TouchpadAvailable = false;
-        State.TouchActive = false;
-        State.TouchClick = State.Create || State.Options;
+        s.TouchpadAvailable = false;
+        s.TouchActive = false;
+        s.TouchClick = s.Create || s.Options;
+        State = s;  // Atomic publish: all fields are complete before reference becomes visible
     }
 
     private void ClearControllerState() {
-        State.LX = State.LY = State.RX = State.RY = State.L2 = State.R2 = 0.0;
-        State.Up = State.Right = State.Down = State.Left = false;
-        State.Square = State.Triangle = State.Cross = State.Circle = false;
-        State.L1 = State.R1 = State.L3 = State.R3 = State.Options = State.Create = false;
-        State.TouchActive = State.TouchClick = false;
+        State = new ControllerState();
     }
 
     private IntPtr FindAndOpenDevice() {
@@ -987,10 +975,14 @@ internal sealed class DirectHidController {
     private void ParseReport(string name, byte[] r) {
         if (r.Length < 10 || r[0] != 0x01) return;
 
-        State.LX = Axis(r[1]);
-        State.LY = Axis(r[2]);
-        State.RX = Axis(r[3]);
-        State.RY = Axis(r[4]);
+        ControllerState s = new ControllerState();
+        s.Connected = true;
+        s.TouchpadAvailable = State.TouchpadAvailable;
+
+        s.LX = Axis(r[1]);
+        s.LY = Axis(r[2]);
+        s.RX = Axis(r[3]);
+        s.RY = Axis(r[4]);
         
         // Correct DualSense USB offsets:
         // r[5] = L2 Analog
@@ -999,51 +991,55 @@ internal sealed class DirectHidController {
         // r[8] = D-Pad (low 4 bits) and Face Buttons (high 4 bits)
         // r[9] = L1, R1, L2 Btn, R2 Btn, Share, Options, L3, R3
         
-        State.L2 = Trigger(r[5]);
-        State.R2 = Trigger(r[6]);
+        s.L2 = Trigger(r[5]);
+        s.R2 = Trigger(r[6]);
         
-        ParseDpadAndFace(r[8]);
+        FillDpadAndFace(s, r[8]);
         
         byte b2 = r[9];
-        State.L1 = (b2 & 0x01) != 0;
-        State.R1 = (b2 & 0x02) != 0;
+        s.L1 = (b2 & 0x01) != 0;
+        s.R1 = (b2 & 0x02) != 0;
         // bits 2 and 3 are digital L2/R2, but we use the analog values from r[5] and r[6]
         
-        State.Create = (b2 & 0x10) != 0;
-        State.Options = (b2 & 0x20) != 0;
-        State.TouchClick = (r[10] & 0x02) != 0;
-        State.L3 = (b2 & 0x40) != 0;
-        State.R3 = (b2 & 0x80) != 0;
+        s.Create = (b2 & 0x10) != 0;
+        s.Options = (b2 & 0x20) != 0;
+        if (r.Length > 10) s.TouchClick = (r[10] & 0x02) != 0;
+        s.L3 = (b2 & 0x40) != 0;
+        s.R3 = (b2 & 0x80) != 0;
+
+        FillTouch(s, r, 33, 1920.0, 1080.0);
+
+        State = s;  // Atomic publish: all fields are complete before reference becomes visible
     }
 
-    private void ParseDpadAndFace(byte b) {
+    private static void FillDpadAndFace(ControllerState s, byte b) {
         int d = b & 0x0F;
-        State.Up = d == 0 || d == 1 || d == 7;
-        State.Right = d == 1 || d == 2 || d == 3;
-        State.Down = d == 3 || d == 4 || d == 5;
-        State.Left = d == 5 || d == 6 || d == 7;
-        State.Square = (b & 0x10) != 0;
-        State.Cross = (b & 0x20) != 0;
-        State.Circle = (b & 0x40) != 0;
-        State.Triangle = (b & 0x80) != 0;
+        s.Up = d == 0 || d == 1 || d == 7;
+        s.Right = d == 1 || d == 2 || d == 3;
+        s.Down = d == 3 || d == 4 || d == 5;
+        s.Left = d == 5 || d == 6 || d == 7;
+        s.Square = (b & 0x10) != 0;
+        s.Cross = (b & 0x20) != 0;
+        s.Circle = (b & 0x40) != 0;
+        s.Triangle = (b & 0x80) != 0;
     }
 
-    private void ParseTouch(byte[] r, int index, double width, double height) {
+    private static void FillTouch(ControllerState s, byte[] r, int index, double width, double height) {
         if (index < 0 || r.Length <= index + 4) {
-            State.TouchActive = false;
+            s.TouchActive = false;
             return;
         }
         byte status = r[index + 1];
         bool active = (status & 0x80) == 0;
         if (!active) {
-            State.TouchActive = false;
+            s.TouchActive = false;
             return;
         }
         int x = r[index + 2] | ((r[index + 3] & 0x0F) << 8);
         int y = ((r[index + 3] & 0xF0) >> 4) | (r[index + 4] << 4);
-        State.TouchX = Clamp(x / width, 0.0, 1.0);
-        State.TouchY = Clamp(y / height, 0.0, 1.0);
-        State.TouchActive = true;
+        s.TouchX = Clamp(x / width, 0.0, 1.0);
+        s.TouchY = Clamp(y / height, 0.0, 1.0);
+        s.TouchActive = true;
     }
 
 
@@ -1234,7 +1230,7 @@ internal sealed class MapperForm : Form {
     private double _l1DownMs, _r1DownMs, _l2DownMs, _r2DownMs;
 
     private void OnTick(object sender, EventArgs e) {
-        ControllerState s = _hid.State.Snapshot();
+        ControllerState s = _hid.State;
         double now = NowMs();
         double deltaSec = Math.Max(0.0, (now - _lastTickMs) / 1000.0);
         _lastTickMs = now;
