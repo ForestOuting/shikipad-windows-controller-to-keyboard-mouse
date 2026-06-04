@@ -81,7 +81,7 @@ internal sealed class Config {
     public int BaseRepeatSlowIntervalMs = 160;
     public int BaseRepeatRampMs = 1200;
     public int ActionLayerGraceMs = 80;
-    public int LayerTakeoverWindowMs = 50;
+    public int LayerTakeoverWindowMs = 70;
     public int ActionLayerSwitchGuardMs = 120;
     public int ComboLayerWindowMs = 80;
     public bool UseScanCode = true;
@@ -165,7 +165,7 @@ internal sealed class Config {
                 shouldSaveMigratedConfig = true;
             }
             if (cfg.LayerTakeoverWindowMs < 0 || cfg.LayerTakeoverWindowMs > cfg.ActionLayerGraceMs) {
-                int fallbackLayerTakeoverMs = Math.Min(50, Math.Max(0, cfg.ActionLayerGraceMs));
+                int fallbackLayerTakeoverMs = Math.Min(70, Math.Max(0, cfg.ActionLayerGraceMs));
                 Logger.Warn("invalid layerTakeoverWindowMs; using " + fallbackLayerTakeoverMs.ToString(CultureInfo.InvariantCulture));
                 cfg.LayerTakeoverWindowMs = fallbackLayerTakeoverMs;
                 shouldSaveMigratedConfig = true;
