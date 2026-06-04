@@ -226,7 +226,7 @@ internal sealed class Config {
         Write(sb, "useInterception", UseInterception, true);
         Write(sb, "scrollSlowIntervalMs", ScrollSlowIntervalMs, true);
         Write(sb, "scrollFastIntervalMs", ScrollFastIntervalMs, true);
-        Write(sb, "r3FreezeMs", R3FreezeMs, true);
+        Write(sb, "r3FreezeMs", R3FreezeMs, false);
         
         sb.AppendLine("}");
         File.WriteAllText(path, sb.ToString());
@@ -331,9 +331,7 @@ internal sealed class MappingEngine {
         return layer;
     }
 
-    public Layer Resolve(bool l1, bool r1, bool l2, bool r2, double l1Ms, double r1Ms, double l2Ms, double r2Ms) {
-        return Resolve(l1, r1, l2, r2, l1Ms, r1Ms, l2Ms, r2Ms, 80.0);
-    }
+
 
     private static bool IsComboWithinWindow(bool a, bool b, double aMs, double bMs, double windowMs) {
         return a && b && Math.Abs(aMs - bMs) <= windowMs;
@@ -910,9 +908,6 @@ internal sealed class DirectHidController {
         State = s;  // Atomic publish: all fields are complete before reference becomes visible
     }
 
-    private void ClearControllerState() {
-        State = new ControllerState();
-    }
 
     private IntPtr FindAndOpenDevice() {
         Guid hidGuid;
@@ -1255,8 +1250,6 @@ internal sealed class MapperForm : Form {
         bool preL2 = _l2Pressed;
         bool preR2 = _r2Pressed;
         UpdateTriggers(s, now);
-        bool l2JustDown = _l2Pressed && !preL2;
-        bool r2JustDown = _r2Pressed && !preR2;
 
         UpdateLeftStick(s, now);
         UpdateActionButtons(s, now);
@@ -1523,7 +1516,6 @@ internal sealed class MapperForm : Form {
                 PhysicalKey key = layerKey;
                 if (ShouldDeferInitialAction(layer)) {
                     hold = new ButtonHold();
-                    hold.Down = true;
                     hold.Pending = true;
                     hold.PendingLayer = layer;
                     hold.PendingLayerMs = layerMs;
@@ -1535,7 +1527,6 @@ internal sealed class MapperForm : Form {
 
                 if (IsFunctionKey(key)) {
                     ActivateFnKey(key, s.TouchClick);
-                    hold.Down = true;
                     hold.Key = key;
                     hold.KeyIsDown = false;
                     hold.SuppressUntilRelease = true;
@@ -1544,7 +1535,7 @@ internal sealed class MapperForm : Form {
                     continue;
                 }
                 
-                hold.Down = true;
+                
                 hold.Key = key;
                 hold.KeyIsDown = false;
 
@@ -1793,7 +1784,7 @@ internal sealed class MapperForm : Form {
             _injector.CurrentReason = "R3";
             _injector.MouseButton(1, true);
             _rightMouseDown = true;
-            _mouseFreezeUntilMs = now + 60.0;
+            _mouseFreezeUntilMs = now + _config.R3FreezeMs;
         } else if (!s.R3 && _rightMouseDown) {
             _injector.CurrentSource = "StickClick";
             _injector.CurrentReason = "R3 release";
@@ -1856,7 +1847,7 @@ internal sealed class MapperForm : Form {
             double dy = _touchLastY - _touchStartY;
             double elapsed = now - _touchStartMs;
             _touchTracking = false;
-            if (elapsed <= 600.0) {
+            if (elapsed <= _config.TouchpadMaxSwipeMs) {
                 _injector.CurrentSource = "Touchpad";
                 _injector.CurrentReason = "Swipe";
                 Swipe(dx, dy);
@@ -1867,10 +1858,10 @@ internal sealed class MapperForm : Form {
     private void Swipe(double dx, double dy) {
         double ax = Math.Abs(dx);
         double ay = Math.Abs(dy);
-        if (ax >= 0.22 && ax >= ay * 1.5) {
+        if (ax >= _config.TouchpadSwipeThreshold && ax >= ay * 1.5) {
             if (dx > 0) _injector.KeyTap(PhysicalKey.Tab, false, true, false, false);
             else _injector.KeyTap(PhysicalKey.Tab, true, true, false, false);
-        } else if (ay >= 0.22 && ay >= ax * 1.5) {
+        } else if (ay >= _config.TouchpadSwipeThreshold && ay >= ax * 1.5) {
             if (dy > 0) _injector.KeyTap(PhysicalKey.Tab, false, false, true, false);
             else _injector.KeyTap(PhysicalKey.Tab, true, false, true, false);
         }
@@ -1953,7 +1944,6 @@ internal sealed class MapperForm : Form {
     private static double Clamp(double value, double min, double max) { return value < min ? min : (value > max ? max : value); }
 
     private struct ButtonHold {
-        public bool Down;
         public PhysicalKey Key;
         public Layer KeyLayer;
         public bool KeyIsDown;
@@ -2442,28 +2432,6 @@ internal static class Program {
         WriteGradientText("\u2570" + new string('\u2500', panelWidth - 2) + "\u256f", SeasonFlowStops());
         Console.WriteLine();
         WriteSeasonDropShadow(width, panelWidth);
-    }
-
-    private static void WriteAtmosphereLine(int width, int panelWidth, int variant) {
-        string[] items = variant == 0
-            ? new string[] { "\u22c6", "(\u25d5\u203f\u25d5)", "\u273f", "\u25c7", "(\uFF61\u30fb\u03c9\u30fb\uFF61)", "\u2727" }
-            : new string[] { "\u2726", "\u273f", "(\u02d8\u03c9\u02d8)", "\u25c8", "\u2744", "(\u2606\u25bd\u2606)" };
-        Rgb[] colors = new Rgb[] {
-            new Rgb(130, 238, 255), new Rgb(255, 133, 197), new Rgb(126, 255, 190),
-            new Rgb(188, 133, 255), new Rgb(255, 210, 100), new Rgb(247, 252, 255)
-        };
-        int left = (width - panelWidth) / 2;
-        Console.Write(new string(' ', left));
-        int inner = panelWidth;
-        int cell = inner / items.Length;
-        int used = 0;
-        for (int i = 0; i < items.Length; i++) {
-            int cellWidth = (i == items.Length - 1) ? inner - used : cell;
-            string item = CenterLine(cellWidth, items[i]);
-            WriteRgb(colors[(i + variant) % colors.Length], item);
-            used += cellWidth;
-        }
-        Console.WriteLine();
     }
 
     private static void WriteLogoHalo(int width, int panelWidth, bool top, bool zh) {
