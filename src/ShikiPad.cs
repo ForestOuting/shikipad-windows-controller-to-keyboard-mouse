@@ -81,7 +81,7 @@ internal sealed class Config {
     public int BaseRepeatSlowIntervalMs = 160;
     public int BaseRepeatRampMs = 1200;
     public int ActionLayerGraceMs = 80;
-    public int LayerTakeoverWindowMs = 80;
+    public int LayerTakeoverWindowMs = 50;
     public int ActionLayerSwitchGuardMs = 120;
     public int ComboLayerWindowMs = 80;
     public bool UseScanCode = true;
@@ -165,14 +165,9 @@ internal sealed class Config {
                 shouldSaveMigratedConfig = true;
             }
             if (cfg.LayerTakeoverWindowMs < 0 || cfg.LayerTakeoverWindowMs > cfg.ActionLayerGraceMs) {
-                int fallbackLayerTakeoverMs = Math.Min(80, Math.Max(0, cfg.ActionLayerGraceMs));
+                int fallbackLayerTakeoverMs = Math.Min(50, Math.Max(0, cfg.ActionLayerGraceMs));
                 Logger.Warn("invalid layerTakeoverWindowMs; using " + fallbackLayerTakeoverMs.ToString(CultureInfo.InvariantCulture));
                 cfg.LayerTakeoverWindowMs = fallbackLayerTakeoverMs;
-                shouldSaveMigratedConfig = true;
-            }
-            if (cfg.LayerTakeoverWindowMs < cfg.ActionLayerGraceMs) {
-                Logger.Info("migrating layerTakeoverWindowMs from " + cfg.LayerTakeoverWindowMs.ToString(CultureInfo.InvariantCulture) + " to " + cfg.ActionLayerGraceMs.ToString(CultureInfo.InvariantCulture));
-                cfg.LayerTakeoverWindowMs = cfg.ActionLayerGraceMs;
                 shouldSaveMigratedConfig = true;
             }
             if (cfg.ComboLayerWindowMs < 0 || cfg.ComboLayerWindowMs > 500) {
