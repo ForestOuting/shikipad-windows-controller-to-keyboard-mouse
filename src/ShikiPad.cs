@@ -1743,9 +1743,15 @@ internal sealed class MapperForm : Form {
         if (Math.Abs(dx) + Math.Abs(dy) < 0.000001) return;
         _mouseAccumX += dx;
         _mouseAccumY += dy;
+        // Drift suppression: when stick is barely outside deadzone, decay accumulators
+        // so tiny drift never accumulates to the send threshold
+        if (speedRatio < 0.05) {
+            _mouseAccumX *= 0.8;
+            _mouseAccumY *= 0.8;
+        }
         int ix = (int)_mouseAccumX;
         int iy = (int)_mouseAccumY;
-        if (ix != 0 || iy != 0) {
+        if (Math.Abs(ix) >= 2 || Math.Abs(iy) >= 2) {
             _injector.CurrentSource = "RightStick";
             _injector.CurrentReason = "Mouse Move";
             _injector.MouseMove(ix, iy);
