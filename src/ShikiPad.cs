@@ -1213,8 +1213,6 @@ internal sealed class MapperForm : Form {
 
     private bool _prevL1, _prevR1;
     private double _l1DownMs, _r1DownMs, _l2DownMs, _r2DownMs;
-    private bool _modifierConflict;
-    private Layer _stableLayer;
 
     private void OnTick(object sender, EventArgs e) {
         ControllerState s = _hid.State;
@@ -1238,7 +1236,6 @@ internal sealed class MapperForm : Form {
             ReleaseHeldActionKeys();
             _leftDirection = StickDirection.None;
             _scrollNextMs = 0;
-            _modifierConflict = false;
             return;
         }
         if (!_printedConnectedGuide) {
@@ -1250,23 +1247,6 @@ internal sealed class MapperForm : Form {
         UpdateTriggers(s, now);
         bool l2JustDown = _l2Pressed && !preL2;
         bool r2JustDown = _r2Pressed && !preR2;
-
-        // Detect conflicting modifier change: a new modifier pressed while another is still held.
-        // In this case, action buttons pressed in this same frame should use the pre-change layer,
-        // not the current layer which is polluted by the newly-pressed modifier's timestamp.
-        bool anyStillHeld = (preL1 && s.L1) || (preR1 && s.R1) || (preL2 && _l2Pressed) || (preR2 && _r2Pressed);
-        _modifierConflict = anyStillHeld && (l1JustDown || r1JustDown || l2JustDown || r2JustDown);
-
-        if (_modifierConflict) {
-            // Compute layer using only modifiers that were already held (exclude just-pressed ones)
-            _stableLayer = _mapping.Resolve(
-                preL1 && s.L1, preR1 && s.R1, preL2 && _l2Pressed, preR2 && _r2Pressed,
-                _l1DownMs, _r1DownMs, _l2DownMs, _r2DownMs, _config.ComboLayerWindowMs);
-
-            // Existing pending buttons keep their grace window. A modifier pressed after
-            // the action button can still take over; only action buttons newly pressed in
-            // this same polling frame use the stable pre-change layer below.
-        }
 
         UpdateLeftStick(s, now);
         UpdateActionButtons(s, now);
@@ -1537,17 +1517,8 @@ internal sealed class MapperForm : Form {
                     hold = new ButtonHold();
                     hold.Down = true;
                     hold.Pending = true;
-                    // If a modifier conflict was detected this tick, use the stable layer
-                    // (only pre-existing modifiers) to prevent the just-pressed modifier
-                    // from stealing this button's layer assignment
-                    if (_modifierConflict) {
-                        hold.PendingLayer = _stableLayer;
-                        hold.PendingLayerMs = LayerTimestamp(_stableLayer);
-                        hold.PendingLayerLocked = true;
-                    } else {
-                        hold.PendingLayer = layer;
-                        hold.PendingLayerMs = layerMs;
-                    }
+                    hold.PendingLayer = layer;
+                    hold.PendingLayerMs = layerMs;
                     hold.PendingSinceMs = now;
                     _holds[i] = hold;
                     _prevDown[i] = curr;
@@ -1681,7 +1652,6 @@ internal sealed class MapperForm : Form {
         Layer next = ResolvePendingLayer(
             hold.PendingLayer,
             hold.PendingLayerMs,
-            hold.PendingLayerLocked,
             hold.PendingSinceMs,
             layer,
             layerMs,
@@ -1692,8 +1662,7 @@ internal sealed class MapperForm : Form {
         hold.PendingLayerMs = layerMs;
     }
 
-    internal static Layer ResolvePendingLayer(Layer pendingLayer, double pendingLayerMs, bool pendingLayerLocked, double pendingSinceMs, Layer layer, double layerMs, double takeoverWindowMs) {
-        if (pendingLayerLocked) return pendingLayer;
+    internal static Layer ResolvePendingLayer(Layer pendingLayer, double pendingLayerMs, double pendingSinceMs, Layer layer, double layerMs, double takeoverWindowMs) {
         if (layer == Layer.Base || layer == Layer.Reserved) return pendingLayer;
         if (layer == pendingLayer) return pendingLayer;
         if (layerMs < pendingSinceMs) return pendingLayer;
@@ -1986,7 +1955,6 @@ internal sealed class MapperForm : Form {
         public double PendingLayerMs;
         public bool PendingReleased;
         public double PendingSinceMs;
-        public bool PendingLayerLocked;
         public double KeyDownMs;
         public bool RepeatEnabled;
         public double RepeatStartedMs;
@@ -3063,10 +3031,10 @@ internal static class Program {
         PhysicalKey firstKey = mapping.Lookup(firstLayer, ActionButton.Up);
         Layer crossStartLayer = mapping.Resolve(true, false, false, false, l1Ms, 0, 0, 0, config.ComboLayerWindowMs);
         Layer afterQuickR1Layer = mapping.Resolve(true, true, false, false, l1Ms, quickR1Ms, 0, 0, config.ComboLayerWindowMs);
-        Layer quickSettledLayer = MapperForm.ResolvePendingLayer(crossStartLayer, l1Ms, false, crossMs, afterQuickR1Layer, quickR1Ms, config.LayerTakeoverWindowMs);
+        Layer quickSettledLayer = MapperForm.ResolvePendingLayer(crossStartLayer, l1Ms, crossMs, afterQuickR1Layer, quickR1Ms, config.LayerTakeoverWindowMs);
         PhysicalKey quickSettledKey = mapping.Lookup(quickSettledLayer, ActionButton.Cross);
         Layer afterLateR1Layer = mapping.Resolve(true, true, false, false, l1Ms, lateR1Ms, 0, 0, config.ComboLayerWindowMs);
-        Layer lateSettledLayer = MapperForm.ResolvePendingLayer(crossStartLayer, l1Ms, false, crossMs, afterLateR1Layer, lateR1Ms, config.LayerTakeoverWindowMs);
+        Layer lateSettledLayer = MapperForm.ResolvePendingLayer(crossStartLayer, l1Ms, crossMs, afterLateR1Layer, lateR1Ms, config.LayerTakeoverWindowMs);
         PhysicalKey lateSettledKey = mapping.Lookup(lateSettledLayer, ActionButton.Cross);
 
         bool firstSettled = crossMs - upMs >= config.ActionLayerGraceMs;
