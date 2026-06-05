@@ -2626,7 +2626,7 @@ internal static class Program {
         PrintRunHint();
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        Application.Run(new MapperForm(config, controllerProfile, debugAltTab, debugSources, traceInput, traceSendinput));
+        Application.Run(new MapperForm(config, controllerProfile, debugSources, traceInput, traceSendinput));
         return 0;
     }
 
