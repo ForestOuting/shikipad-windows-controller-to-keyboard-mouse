@@ -62,7 +62,6 @@ internal sealed class Config {
     public double RightStickDeadzone = 0.03;
     public string RightStickCurve = "power";
     public double RightStickCurveExponent = 2.2;
-    public double RightStickEpsilon = 0.002;
     public double LeftStickEnterDeadzone = 0.50;
     public double LeftStickExitDeadzone = 0.35;
     public double TriggerPressThreshold = 0.35;
@@ -105,7 +104,6 @@ internal sealed class Config {
             cfg.RightStickDeadzone = GetDouble(text, "rightStickDeadzone", cfg.RightStickDeadzone);
             cfg.RightStickCurve = GetString(text, "rightStickCurve", cfg.RightStickCurve);
             cfg.RightStickCurveExponent = GetDouble(text, "rightStickCurveExponent", cfg.RightStickCurveExponent);
-            cfg.RightStickEpsilon = GetDouble(text, "rightStickEpsilon", cfg.RightStickEpsilon);
             cfg.LeftStickEnterDeadzone = GetDouble(text, "leftStickEnterDeadzone", cfg.LeftStickEnterDeadzone);
             cfg.LeftStickExitDeadzone = GetDouble(text, "leftStickExitDeadzone", cfg.LeftStickExitDeadzone);
             cfg.TriggerPressThreshold = GetDouble(text, "triggerPressThreshold", cfg.TriggerPressThreshold);
@@ -138,11 +136,6 @@ internal sealed class Config {
             if (cfg.RightStickCurveExponent <= 0.0 || Double.IsNaN(cfg.RightStickCurveExponent) || Double.IsInfinity(cfg.RightStickCurveExponent)) {
                 Logger.Warn("invalid rightStickCurveExponent; using 2.2");
                 cfg.RightStickCurveExponent = 2.2;
-                shouldSaveMigratedConfig = true;
-            }
-            if (cfg.RightStickEpsilon <= 0.0 || cfg.RightStickEpsilon > 0.01 || Double.IsNaN(cfg.RightStickEpsilon) || Double.IsInfinity(cfg.RightStickEpsilon)) {
-                Logger.Warn("invalid rightStickEpsilon; using 0.002");
-                cfg.RightStickEpsilon = 0.002;
                 shouldSaveMigratedConfig = true;
             }
             if (!text.Contains("\"baseRepeatSlowIntervalMs\"") ||
@@ -196,7 +189,6 @@ internal sealed class Config {
         Write(sb, "rightStickDeadzone", RightStickDeadzone, true);
         Write(sb, "rightStickCurve", RightStickCurve, true);
         Write(sb, "rightStickCurveExponent", RightStickCurveExponent, true);
-        Write(sb, "rightStickEpsilon", RightStickEpsilon, true);
         Write(sb, "leftStickEnterDeadzone", LeftStickEnterDeadzone, true);
         Write(sb, "leftStickExitDeadzone", LeftStickExitDeadzone, true);
         Write(sb, "triggerPressThreshold", TriggerPressThreshold, true);
@@ -921,7 +913,7 @@ internal sealed class DirectHidController {
     private void ParseReport(byte[] r) {
         ControllerState s;
         if (!TryParseDualSenseReport(r, out s)) return;
-        State = s;  // Atomic publish: all fields are complete before reference becomes visible
+        State = s;  // Volatile publish: reference swap ensures state is visible atomically
     }
 
     internal static bool TryParseDualSenseReport(byte[] r, out ControllerState s) {
@@ -1076,7 +1068,6 @@ internal sealed class MapperForm : Form {
     private readonly Stopwatch _clock = Stopwatch.StartNew();
     private readonly ButtonHold[] _holds = new ButtonHold[8];
     private readonly bool[] _prevDown = new bool[8];
-    private bool _debugAltTab;
     private bool _debugSources;
     private bool _enabled;
     private bool _runtimeReleased = true;
@@ -1100,11 +1091,10 @@ internal sealed class MapperForm : Form {
     private bool _disableArmed = true;
     private double _lastTickMs;
 
-    public MapperForm(Config config, ControllerProfile controllerProfile, bool debugAltTab, bool debugSources, bool traceInput, bool traceSendinput) {
+    public MapperForm(Config config, ControllerProfile controllerProfile, bool debugSources, bool traceInput, bool traceSendinput) {
         _config = config;
         _controllerProfile = controllerProfile;
         _hid = new DirectHidController(controllerProfile);
-        _debugAltTab = debugAltTab;
         _debugSources = debugSources;
         _enabled = config.Enabled;
         _injector = new InputInjector(config.UseScanCode, config.UseInterception);
@@ -1398,7 +1388,7 @@ internal sealed class MapperForm : Form {
                     continue;
                 } else if (resolvedLayerKey != PhysicalKey.None) {
                     if (resolvedLayer != Layer.Base) {
-                        TapActionKey(i, resolvedLayerKey, "Button " + ActionButtonName(i) + " virtual tap", resolvedLayer);
+                        TapActionKey(i, resolvedLayerKey, "Button " + ActionButtonName(i) + " virtual tap");
                         if (!releasedPending) {
                             hold.Pending = false;
                             hold.PendingReleased = false;
@@ -1438,7 +1428,7 @@ internal sealed class MapperForm : Form {
 
             if (!prev && curr) {
                 PhysicalKey key = layerKey;
-                if (ShouldDeferInitialAction(layer)) {
+                if (ShouldDeferInitialAction()) {
                     hold = new ButtonHold();
                     hold.Pending = true;
                     hold.PendingLayer = layer;
@@ -1458,7 +1448,6 @@ internal sealed class MapperForm : Form {
                     _prevDown[i] = curr;
                     continue;
                 }
-                
                 
                 hold.Key = key;
                 hold.KeyIsDown = false;
@@ -1528,7 +1517,7 @@ internal sealed class MapperForm : Form {
                     }
 
                     if (layer != Layer.Base && currentLayerKey != PhysicalKey.None) {
-                        TapActionKey(i, currentLayerKey, "Button " + ActionButtonName(i) + " layer change virtual tap", layer);
+                        TapActionKey(i, currentLayerKey, "Button " + ActionButtonName(i) + " layer change virtual tap");
                         hold.Key = currentLayerKey;
                         hold.KeyLayer = layer;
                         hold.KeyIsDown = false;
@@ -1555,7 +1544,7 @@ internal sealed class MapperForm : Form {
         }
     }
 
-    private bool ShouldDeferInitialAction(Layer layer) {
+    private bool ShouldDeferInitialAction() {
         return _config.ActionLayerGraceMs > 0;
     }
 
@@ -1631,7 +1620,7 @@ internal sealed class MapperForm : Form {
         hold.NextRepeatMs = now + Math.Max(1, _config.RepeatDelayMs);
     }
 
-    private void TapActionKey(int index, PhysicalKey key, string reason, Layer keyLayer) {
+    private void TapActionKey(int index, PhysicalKey key, string reason) {
         string source = ActionSource(index);
         string btn = ActionButtonName(index);
         _injector.CurrentSource = source;
@@ -1681,14 +1670,7 @@ internal sealed class MapperForm : Form {
     }
 
     private static string ActionButtonName(int index) {
-        string btn = ((ActionButton)index).ToString();
-        if (ActionSource(index) == "DPad") {
-            if (btn == "Up") return "Up";
-            if (btn == "Right") return "Right";
-            if (btn == "Down") return "Down";
-            if (btn == "Left") return "Left";
-        }
-        return btn;
+        return ((ActionButton)index).ToString();
     }
 
     private void UpdateMouseButtons(ControllerState s, double now) {
@@ -1743,15 +1725,9 @@ internal sealed class MapperForm : Form {
         if (Math.Abs(dx) + Math.Abs(dy) < 0.000001) return;
         _mouseAccumX += dx;
         _mouseAccumY += dy;
-        // Drift suppression: when stick is barely outside deadzone, decay accumulators
-        // so tiny drift never accumulates to the send threshold
-        if (speedRatio < 0.05) {
-            _mouseAccumX *= 0.8;
-            _mouseAccumY *= 0.8;
-        }
         int ix = (int)_mouseAccumX;
         int iy = (int)_mouseAccumY;
-        if (Math.Abs(ix) >= 2 || Math.Abs(iy) >= 2) {
+        if (ix != 0 || iy != 0) {
             _injector.CurrentSource = "RightStick";
             _injector.CurrentReason = "Mouse Move";
             _injector.MouseMove(ix, iy);
@@ -1789,6 +1765,19 @@ internal sealed class MapperForm : Form {
         _accumulatedModifiers.Clear();
         _activeFnKeys.Clear();
         for (int i = 0; i < _holds.Length; i++) _holds[i] = new ButtonHold();
+        for (int i = 0; i < _prevDown.Length; i++) _prevDown[i] = false;
+        _prevL1 = false;
+        _prevR1 = false;
+        _l1DownMs = 0;
+        _r1DownMs = 0;
+        _l2DownMs = 0;
+        _r2DownMs = 0;
+        _l2Pressed = false;
+        _r2Pressed = false;
+        _prevTouchClick = false;
+        _mouseFreezeUntilMs = 0;
+        _mouseAccumX = 0;
+        _mouseAccumY = 0;
     }
 
     private void ReleaseHeldActionKeys() {
@@ -1797,7 +1786,6 @@ internal sealed class MapperForm : Form {
                 _injector.CurrentSource = "Release";
                 _injector.CurrentReason = "Runtime release " + ActionButtonName(i);
                 _injector.KeyUp(_holds[i].Key);
-                if (_holds[i].Key == PhysicalKey.Tab) DebugAltTab("Tab up");
             }
             _holds[i] = new ButtonHold();
         }
@@ -1822,12 +1810,6 @@ internal sealed class MapperForm : Form {
         }
     }
 
-    private void DebugAltTab(string message) {
-        if (!_debugAltTab) return;
-        string line = message;
-        Logger.Info(line);
-        Console.WriteLine(line);
-    }
 
     private void DebugSources(string message) {
         if (!_debugSources) return;
@@ -2634,11 +2616,9 @@ internal static class Program {
         Logger.Info("mouse settings: rightStickDeadzone = " + config.RightStickDeadzone.ToString("0.0", CultureInfo.InvariantCulture) +
                     ", rightStickCurve = " + config.RightStickCurve +
                     ", rightStickCurveExponent = " + config.RightStickCurveExponent.ToString("0.###", CultureInfo.InvariantCulture) +
-                    ", rightStickEpsilon = " + config.RightStickEpsilon.ToString("0.###", CultureInfo.InvariantCulture) +
                     ", mouseMaxSpeed = " + config.MouseMaxSpeed.ToString(CultureInfo.InvariantCulture) +
                     ", neutralCalibration = enabled");
         Logger.Info("left stick modifiers = physical held keys");
-        if (debugAltTab) Logger.Info("debug-alt-tab enabled");
         if (debugSources) Logger.Info("debug-sources enabled");
         if (traceInput) Logger.Info("trace-input enabled");
         if (traceSendinput) Logger.Info("trace-sendinput enabled");
@@ -2938,13 +2918,11 @@ internal static class Program {
         Console.WriteLine("rightStickDeadzone = " + config.RightStickDeadzone.ToString("0.0", CultureInfo.InvariantCulture));
         Console.WriteLine("rightStickCurve = " + config.RightStickCurve);
         Console.WriteLine("rightStickCurveExponent = " + config.RightStickCurveExponent.ToString("0.###", CultureInfo.InvariantCulture));
-        Console.WriteLine("rightStickEpsilon = " + config.RightStickEpsilon.ToString("0.###", CultureInfo.InvariantCulture));
         Console.WriteLine("mouseMaxSpeed = " + config.MouseMaxSpeed.ToString(CultureInfo.InvariantCulture));
         Console.WriteLine("neutralCalibration = enabled");
         Logger.Info("mouse-test: rightStickDeadzone = " + config.RightStickDeadzone.ToString("0.0", CultureInfo.InvariantCulture) +
                     ", rightStickCurve = " + config.RightStickCurve +
                     ", rightStickCurveExponent = " + config.RightStickCurveExponent.ToString("0.###", CultureInfo.InvariantCulture) +
-                    ", rightStickEpsilon = " + config.RightStickEpsilon.ToString("0.###", CultureInfo.InvariantCulture) +
                     ", mouseMaxSpeed = " + config.MouseMaxSpeed.ToString(CultureInfo.InvariantCulture) +
                     ", neutralCalibration = enabled");
     }
