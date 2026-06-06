@@ -1268,11 +1268,6 @@ internal sealed class MapperForm : Form {
         _heldLeftStickKeys.Clear();
         _heldLeftStickKeys.AddRange(desiredKeys);
 
-        if (s.TouchClick) {
-            _scrollNextMs = 0;
-            return;
-        }
-
         if (_leftDirection != StickDirection.Up && _leftDirection != StickDirection.Down) {
             _scrollNextMs = 0;
             return;
