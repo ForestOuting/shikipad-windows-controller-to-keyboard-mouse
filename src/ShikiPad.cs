@@ -71,9 +71,9 @@ internal sealed class Config {
     public int BaseRepeatSlowIntervalMs = 160;
     public int BaseRepeatRampMs = 1200;
     public int ActionLayerGraceMs = 80;
-    public int LayerTakeoverWindowMs = 50;
+    public int LayerTakeoverWindowMs = 35;
     public int ActionLayerSwitchGuardMs = 120;
-    public int ComboLayerWindowMs = 80;
+    public int ComboLayerWindowMs = 50;
     public bool UseScanCode = true;
     public bool UseInterception = true;
     public int ScrollSlowIntervalMs = 100;
@@ -1231,6 +1231,7 @@ internal sealed class MapperForm : Form {
             PhysicalKey rawStickKey = GetLeftStickKey(_leftDirection);
             if (s.TouchClick) {
                 AccumulateLeftStickKey(rawStickKey);
+                desiredKeys.AddRange(_accumulatedModifiers);
             } else {
                 if (_accumulatedModifiers.Count > 0) {
                     AccumulateLeftStickKey(rawStickKey);
@@ -1241,7 +1242,9 @@ internal sealed class MapperForm : Form {
                 }
             }
         } else {
-            if (!s.TouchClick) {
+            if (s.TouchClick) {
+                desiredKeys.AddRange(_accumulatedModifiers);
+            } else {
                 _accumulatedModifiers.Clear();
                 _activeFnKeys.Clear();
             }
