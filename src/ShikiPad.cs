@@ -1227,7 +1227,7 @@ internal sealed class MapperForm : Form {
             _activeFnKeys.Clear();
         }
 
-        if (_leftDirection != StickDirection.None) {
+        if (_leftDirection != StickDirection.None && _leftDirection != StickDirection.Up && _leftDirection != StickDirection.Down) {
             PhysicalKey rawStickKey = GetLeftStickKey(_leftDirection);
             if (s.TouchClick) {
                 AccumulateLeftStickKey(rawStickKey);
