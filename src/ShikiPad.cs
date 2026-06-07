@@ -889,17 +889,22 @@ internal sealed class DirectHidController {
                     attrs.Size = (uint)Marshal.SizeOf(attrs);
                     if (NativeMethods.HidD_GetAttributes(handle, ref attrs)) {
                         if (attrs.VendorID == 0x054C) { // Sony
+                            bool isGamepad = false;
                             IntPtr preparsedData;
                             if (NativeMethods.HidD_GetPreparsedData(handle, out preparsedData)) {
                                 NativeMethods.HIDP_CAPS caps;
                                 if (NativeMethods.HidP_GetCaps(preparsedData, out caps) == 0x110000) { // HIDP_STATUS_SUCCESS
-                                    if (caps.UsagePage != 1 || (caps.Usage != 4 && caps.Usage != 5)) {
-                                        NativeMethods.HidD_FreePreparsedData(preparsedData);
-                                        NativeMethods.CloseHandle(handle);
-                                        continue;
+                                    Logger.Info("Found Sony HID device: UsagePage=" + caps.UsagePage + ", Usage=" + caps.Usage);
+                                    if (caps.UsagePage == 1 && (caps.Usage == 4 || caps.Usage == 5)) {
+                                        isGamepad = true;
                                     }
                                 }
                                 NativeMethods.HidD_FreePreparsedData(preparsedData);
+                            }
+
+                            if (!isGamepad) {
+                                NativeMethods.CloseHandle(handle);
+                                continue;
                             }
 
                             IntPtr prodStr = Marshal.AllocHGlobal(254);
@@ -937,22 +942,28 @@ internal sealed class DirectHidController {
         s = null;
         if (r == null || r.Length < 10) return false;
 
-        bool isUsb = (r[0] == 0x01 && r.Length >= 63);
-        bool isBasicBt = (r[0] == 0x01 && r.Length < 63);
+        bool isUsbProfile = (profile == ControllerProfile.DualSense);
+        bool isBtProfile = (profile == ControllerProfile.DualSenseBT);
         bool isAdvancedBt = (r[0] == 0x31);
 
-        if (profile == ControllerProfile.DualSense) {
-            if (!isUsb) return false;
-        } else if (profile == ControllerProfile.DualSenseBT) {
-            if (!isBasicBt && !isAdvancedBt) return false;
+        if (isUsbProfile) {
+            if (r[0] != 0x01) {
+                Logger.Warn("DualSense (USB) mode rejected report: ID=" + r[0] + ", Length=" + r.Length);
+                return false;
+            }
+        } else if (isBtProfile) {
+            if (r[0] != 0x01 && !isAdvancedBt) {
+                Logger.Warn("DualSense (BT) mode rejected report: ID=" + r[0] + ", Length=" + r.Length);
+                return false;
+            }
         } else {
-            return false; // Should not happen for DualSense profiles
+            return false;
         }
 
         s = new ControllerState();
         s.Connected = true;
 
-        if (isBasicBt) {
+        if (isBtProfile && !isAdvancedBt) {
             s.LX = Axis(r[1]);
             s.LY = Axis(r[2]);
             s.RX = Axis(r[3]);
@@ -974,7 +985,7 @@ internal sealed class DirectHidController {
             byte b3 = r[7];
             s.TouchClick = (b3 & 0x02) != 0;
         } else {
-            int offset = isUsb ? 1 : 2;
+            int offset = isUsbProfile ? 1 : 2;
             
             if (r.Length < offset + 9) return false;
             
