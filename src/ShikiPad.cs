@@ -51,6 +51,7 @@ internal enum StickDirection {
 
 internal enum ControllerProfile {
     DualSense,
+    DualSenseBT,
     Xbox360,
     XboxSeries
 }
@@ -912,42 +913,48 @@ internal sealed class DirectHidController {
 
     private void ParseReport(byte[] r) {
         ControllerState s;
-        if (!TryParseDualSenseReport(r, out s)) return;
+        if (!TryParseDualSenseReport(r, _profile, out s)) return;
         State = s;  // Volatile publish: reference swap ensures state is visible atomically
     }
 
-    internal static bool TryParseDualSenseReport(byte[] r, out ControllerState s) {
+    internal static bool TryParseDualSenseReport(byte[] r, ControllerProfile profile, out ControllerState s) {
         s = null;
-        if (r == null || r.Length < 10 || r[0] != 0x01) return false;
+        if (r == null || r.Length < 10) return false;
+
+        int offset = 0;
+        if (profile == ControllerProfile.DualSense) {
+            if (r[0] != 0x01) return false;
+            offset = 1;
+        } else if (profile == ControllerProfile.DualSenseBT) {
+            if (r[0] != 0x31) return false;
+            offset = 2;
+        } else {
+            return false; // Should not happen for DualSense profiles
+        }
+
+        if (r.Length < offset + 9) return false;
 
         s = new ControllerState();
         s.Connected = true;
 
-        s.LX = Axis(r[1]);
-        s.LY = Axis(r[2]);
-        s.RX = Axis(r[3]);
-        s.RY = Axis(r[4]);
+        s.LX = Axis(r[offset + 0]);
+        s.LY = Axis(r[offset + 1]);
+        s.RX = Axis(r[offset + 2]);
+        s.RY = Axis(r[offset + 3]);
         
-        // Correct DualSense USB offsets:
-        // r[5] = L2 Analog
-        // r[6] = R2 Analog
-        // r[7] = Sequence
-        // r[8] = D-Pad (low 4 bits) and Face Buttons (high 4 bits)
-        // r[9] = L1, R1, L2 Btn, R2 Btn, Share, Options, L3, R3
+        // Correct DualSense offsets:
+        s.L2 = Trigger(r[offset + 4]);
+        s.R2 = Trigger(r[offset + 5]);
         
-        s.L2 = Trigger(r[5]);
-        s.R2 = Trigger(r[6]);
+        FillDpadAndFace(s, r[offset + 7]);
         
-        FillDpadAndFace(s, r[8]);
-        
-        byte b2 = r[9];
+        byte b2 = r[offset + 8];
         s.L1 = (b2 & 0x01) != 0;
         s.R1 = (b2 & 0x02) != 0;
-        // bits 2 and 3 are digital L2/R2, but we use the analog values from r[5] and r[6]
         
         s.Create = (b2 & 0x10) != 0;
         s.Options = (b2 & 0x20) != 0;
-        if (r.Length > 10) s.TouchClick = (r[10] & 0x02) != 0;
+        if (r.Length > offset + 9) s.TouchClick = (r[offset + 9] & 0x02) != 0;
         s.L3 = (b2 & 0x40) != 0;
         s.R3 = (b2 & 0x80) != 0;
 
@@ -2660,23 +2667,25 @@ internal static class Program {
         WriteSeasonPanelBorder(width, panelWidth, true);
         WriteSeasonPanelTitle(width, panelWidth, zh ? "\u25c7 \u9009\u62e9\u624b\u67c4\u578b\u53f7 \u25c7" : "\u25c7 CONTROLLER PROFILE \u25c7");
         WriteSeasonPanelSeparator(width, panelWidth);
-        WritePanelLine(width, panelWidth, "  [1] DualSense", zh ? "PS5 / Direct HID / \u89e6\u63a7\u677f\u84c4\u529b" : "PS5 / Direct HID / touchpad clutch", SeasonSummer(), new Rgb(245, 250, 255));
-        WritePanelLine(width, panelWidth, "  [2] Xbox 360", zh ? "XInput / View \u6216 Menu \u84c4\u529b" : "XInput / View or Menu touchpad clutch", SeasonSpring(), new Rgb(245, 250, 255));
-        WritePanelLine(width, panelWidth, "  [3] Xbox Series X|S", zh ? "XInput / View \u6216 Menu \u84c4\u529b" : "XInput / View or Menu touchpad clutch", SeasonGold(), new Rgb(245, 250, 255));
+        WritePanelLine(width, panelWidth, "  [1] DualSense (USB)", zh ? "PS5 / Direct HID / 触控板蓄力" : "PS5 / Direct HID / touchpad clutch", SeasonSummer(), new Rgb(245, 250, 255));
+        WritePanelLine(width, panelWidth, "  [2] DualSense (BT)", zh ? "蓝牙专属模式 / 隔绝有线干扰" : "PS5 Bluetooth / strict isolation", SeasonSummer(), new Rgb(245, 250, 255));
+        WritePanelLine(width, panelWidth, "  [3] Xbox 360", zh ? "XInput / View 或 Menu 蓄力" : "XInput / View or Menu touchpad clutch", SeasonSpring(), new Rgb(245, 250, 255));
+        WritePanelLine(width, panelWidth, "  [4] Xbox Series X|S", zh ? "XInput / View 或 Menu 蓄力" : "XInput / View or Menu touchpad clutch", SeasonGold(), new Rgb(245, 250, 255));
         WriteSeasonPanelBorder(width, panelWidth, false);
         WriteSeasonDropShadow(width, panelWidth);
         Console.WriteLine();
 
         while (true) {
-            WriteRgb(SeasonSummer(), zh ? "\u9009\u62e9\u624b\u67c4\u578b\u53f7 [1/2/3\uff0cEnter = 1] > " : "Select controller profile [1/2/3, Enter = 1] > ");
+            WriteRgb(SeasonSummer(), zh ? "选择手柄型号 [1/2/3/4，Enter = 1] > " : "Select controller profile [1/2/3/4, Enter = 1] > ");
             Console.Write("\x1b[0m");
             string line = Console.ReadLine();
             if (line == null) return ControllerProfile.DualSense;
             line = line.Trim();
             if (line.Length == 0 || line == "1") return ControllerProfile.DualSense;
-            if (line == "2") return ControllerProfile.Xbox360;
-            if (line == "3") return ControllerProfile.XboxSeries;
-            WriteRgb(SeasonAutumn(), zh ? "\u8bf7\u9009\u62e9 1\u30012 \u6216 3\u3002\n" : "Please choose 1, 2, or 3.\n");
+            if (line == "2") return ControllerProfile.DualSenseBT;
+            if (line == "3") return ControllerProfile.Xbox360;
+            if (line == "4") return ControllerProfile.XboxSeries;
+            WriteRgb(SeasonAutumn(), zh ? "请选择 1、2、3 或 4。\n" : "Please choose 1, 2, 3, or 4.\n");
         }
     }
 
@@ -2697,15 +2706,19 @@ internal static class Program {
 
     private static bool TryParseControllerProfile(string value, out ControllerProfile profile) {
         string v = (value ?? "").Trim().ToLowerInvariant().Replace("-", "").Replace("_", "").Replace(" ", "");
-        if (v == "1" || v == "ds5" || v == "dualsense" || v == "ps5") {
+        if (v == "1" || v == "ds5" || v == "dualsense" || v == "ps5" || v == "ds5usb") {
             profile = ControllerProfile.DualSense;
             return true;
         }
-        if (v == "2" || v == "xbox360" || v == "x360") {
+        if (v == "2" || v == "ds5bt" || v == "dualsensebt" || v == "ps5bt") {
+            profile = ControllerProfile.DualSenseBT;
+            return true;
+        }
+        if (v == "3" || v == "xbox360" || v == "x360") {
             profile = ControllerProfile.Xbox360;
             return true;
         }
-        if (v == "3" || v == "xboxseries" || v == "xboxseriesxs" || v == "xsx" || v == "xss" || v == "xboxxs") {
+        if (v == "4" || v == "xboxseries" || v == "xboxseriesxs" || v == "xsx" || v == "xss" || v == "xboxxs") {
             profile = ControllerProfile.XboxSeries;
             return true;
         }
@@ -2715,9 +2728,10 @@ internal static class Program {
 
     private static string ControllerProfileName(ControllerProfile profile) {
         switch (profile) {
+            case ControllerProfile.DualSenseBT: return "DualSense / Direct HID (Bluetooth)";
             case ControllerProfile.Xbox360: return "Xbox 360 Controller / XInput";
             case ControllerProfile.XboxSeries: return "Xbox Series X|S Controller / XInput";
-            default: return "DualSense / Direct HID";
+            default: return "DualSense / Direct HID (USB)";
         }
     }
 
