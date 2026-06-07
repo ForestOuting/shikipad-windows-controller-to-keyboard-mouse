@@ -2968,12 +2968,12 @@ internal static class Program {
         byte[] dualSensePressed = NeutralDualSenseReport();
         dualSensePressed[10] = 0x02;
         ControllerState dualSensePressedState;
-        bool parsedPressed = DirectHidController.TryParseDualSenseReport(dualSensePressed, out dualSensePressedState);
+        bool parsedPressed = DirectHidController.TryParseDualSenseReport(dualSensePressed, ControllerProfile.DualSense, out dualSensePressedState);
         ok = PrintClutchCheck("DualSense touchpad press = clutch", parsedPressed && dualSensePressedState.TouchClick) && ok;
 
         byte[] dualSenseReleased = NeutralDualSenseReport();
         ControllerState dualSenseReleasedState;
-        bool parsedReleased = DirectHidController.TryParseDualSenseReport(dualSenseReleased, out dualSenseReleasedState);
+        bool parsedReleased = DirectHidController.TryParseDualSenseReport(dualSenseReleased, ControllerProfile.DualSense, out dualSenseReleasedState);
         ok = PrintClutchCheck("DualSense touchpad released = no clutch", parsedReleased && !dualSenseReleasedState.TouchClick) && ok;
 
         NativeMethods.XINPUT_GAMEPAD xboxBack = new NativeMethods.XINPUT_GAMEPAD();
