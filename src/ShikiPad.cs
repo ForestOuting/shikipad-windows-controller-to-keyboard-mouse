@@ -61,10 +61,10 @@ internal enum ControllerProfile {
 internal sealed class Config {
     public bool Enabled = true;
     public double MouseSensitivity = 1.0;
-    public double MouseMaxSpeed = 28.0;
+    public double MouseMaxSpeed = 16.0;
     public double RightStickDeadzone = 0.05;
     public string RightStickCurve = "power";
-    public double RightStickCurveExponent = 2.2;
+    public double RightStickCurveExponent = 2.4;
     public double LeftStickEnterDeadzone = 0.50;
     public double LeftStickExitDeadzone = 0.45;
     public double TriggerPressThreshold = 0.35;
@@ -80,7 +80,7 @@ internal sealed class Config {
     public bool UseScanCode = true;
     public bool UseInterception = true;
     public int ScrollSlowIntervalMs = 100;
-    public int ScrollFastIntervalMs = 20;
+    public int ScrollFastIntervalMs = 12;
     public int R3FreezeMs = 60;
     public static Config Load(string path) {
         Config cfg = new Config();
@@ -137,8 +137,8 @@ internal sealed class Config {
                 shouldSaveMigratedConfig = true;
             }
             if (cfg.RightStickCurveExponent <= 0.0 || Double.IsNaN(cfg.RightStickCurveExponent) || Double.IsInfinity(cfg.RightStickCurveExponent)) {
-                Logger.Warn("invalid rightStickCurveExponent; using 2.2");
-                cfg.RightStickCurveExponent = 2.2;
+                Logger.Warn("invalid rightStickCurveExponent; using 2.4");
+                cfg.RightStickCurveExponent = 2.4;
                 shouldSaveMigratedConfig = true;
             }
             if (!text.Contains("\"baseRepeatSlowIntervalMs\"") ||
@@ -1370,7 +1370,10 @@ internal sealed class MapperForm : Form {
         _injector.MouseWheel(_leftDirection == StickDirection.Up ? 1 : -1);
         
         double normalized = Clamp((radius - _config.LeftStickEnterDeadzone) / (1.0 - _config.LeftStickEnterDeadzone), 0.0, 1.0);
-        double interval = _config.ScrollSlowIntervalMs + (_config.ScrollFastIntervalMs - _config.ScrollSlowIntervalMs) * normalized;
+        double slowFreq = 1000.0 / Math.Max(1.0, (double)_config.ScrollSlowIntervalMs);
+        double fastFreq = 1000.0 / Math.Max(1.0, (double)_config.ScrollFastIntervalMs);
+        double freq = slowFreq + (fastFreq - slowFreq) * Math.Pow(normalized, 2.2);
+        double interval = 1000.0 / Math.Max(0.1, freq);
         _scrollNextMs = now + Math.Max(1.0, interval);
     }
     private PhysicalKey TranslateToFKey(PhysicalKey numberKey) {
@@ -1746,12 +1749,12 @@ internal sealed class MapperForm : Form {
     }
 
     private double BaseRepeatIntervalMs(double heldMs) {
-        double fast = Math.Max(5.0, _config.RepeatIntervalMs);
-        double slow = Math.Max(fast, _config.BaseRepeatSlowIntervalMs);
-        double ramp = Math.Max(1.0, _config.BaseRepeatRampMs);
+        double fastFreq = 1000.0 / Math.Max(5.0, (double)_config.RepeatIntervalMs);
+        double slowFreq = 1000.0 / Math.Max(5.0, (double)_config.BaseRepeatSlowIntervalMs);
+        double ramp = Math.Max(1.0, (double)_config.BaseRepeatRampMs);
         double t = Clamp((heldMs - _config.RepeatDelayMs) / ramp, 0.0, 1.0);
-        double eased = t * t * (3.0 - 2.0 * t);
-        return slow + (fast - slow) * eased;
+        double freq = slowFreq + (fastFreq - slowFreq) * Math.Pow(t, 2.5);
+        return 1000.0 / Math.Max(0.1, freq);
     }
 
     private static string ActionSource(int index) {
