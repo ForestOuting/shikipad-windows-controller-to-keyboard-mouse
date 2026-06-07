@@ -924,42 +924,67 @@ internal sealed class DirectHidController {
         s = null;
         if (r == null || r.Length < 10) return false;
 
-        int offset = 0;
+        bool isUsb = (r[0] == 0x01 && r.Length >= 63);
+        bool isBasicBt = (r[0] == 0x01 && r.Length < 63);
+        bool isAdvancedBt = (r[0] == 0x31);
+
         if (profile == ControllerProfile.DualSense) {
-            if (r[0] != 0x01) return false;
-            offset = 1;
+            if (!isUsb) return false;
         } else if (profile == ControllerProfile.DualSenseBT) {
-            if (r[0] != 0x31) return false;
-            offset = 2;
+            if (!isBasicBt && !isAdvancedBt) return false;
         } else {
             return false; // Should not happen for DualSense profiles
         }
 
-        if (r.Length < offset + 9) return false;
-
         s = new ControllerState();
         s.Connected = true;
 
-        s.LX = Axis(r[offset + 0]);
-        s.LY = Axis(r[offset + 1]);
-        s.RX = Axis(r[offset + 2]);
-        s.RY = Axis(r[offset + 3]);
-        
-        // Correct DualSense offsets:
-        s.L2 = Trigger(r[offset + 4]);
-        s.R2 = Trigger(r[offset + 5]);
-        
-        FillDpadAndFace(s, r[offset + 7]);
-        
-        byte b2 = r[offset + 8];
-        s.L1 = (b2 & 0x01) != 0;
-        s.R1 = (b2 & 0x02) != 0;
-        
-        s.Create = (b2 & 0x10) != 0;
-        s.Options = (b2 & 0x20) != 0;
-        if (r.Length > offset + 9) s.TouchClick = (r[offset + 9] & 0x02) != 0;
-        s.L3 = (b2 & 0x40) != 0;
-        s.R3 = (b2 & 0x80) != 0;
+        if (isBasicBt) {
+            s.LX = Axis(r[1]);
+            s.LY = Axis(r[2]);
+            s.RX = Axis(r[3]);
+            s.RY = Axis(r[4]);
+            
+            s.L2 = Trigger(r[8]);
+            s.R2 = Trigger(r[9]);
+            
+            FillDpadAndFace(s, r[5]);
+            
+            byte b2 = r[6];
+            s.L1 = (b2 & 0x01) != 0;
+            s.R1 = (b2 & 0x02) != 0;
+            s.Create = (b2 & 0x10) != 0;
+            s.Options = (b2 & 0x20) != 0;
+            s.L3 = (b2 & 0x40) != 0;
+            s.R3 = (b2 & 0x80) != 0;
+            
+            byte b3 = r[7];
+            s.TouchClick = (b3 & 0x02) != 0;
+        } else {
+            int offset = isUsb ? 1 : 2;
+            
+            if (r.Length < offset + 9) return false;
+            
+            s.LX = Axis(r[offset + 0]);
+            s.LY = Axis(r[offset + 1]);
+            s.RX = Axis(r[offset + 2]);
+            s.RY = Axis(r[offset + 3]);
+            
+            s.L2 = Trigger(r[offset + 4]);
+            s.R2 = Trigger(r[offset + 5]);
+            
+            FillDpadAndFace(s, r[offset + 7]);
+            
+            byte b2 = r[offset + 8];
+            s.L1 = (b2 & 0x01) != 0;
+            s.R1 = (b2 & 0x02) != 0;
+            
+            s.Create = (b2 & 0x10) != 0;
+            s.Options = (b2 & 0x20) != 0;
+            if (r.Length > offset + 9) s.TouchClick = (r[offset + 9] & 0x02) != 0;
+            s.L3 = (b2 & 0x40) != 0;
+            s.R3 = (b2 & 0x80) != 0;
+        }
 
         return true;
     }
@@ -3010,7 +3035,7 @@ internal static class Program {
     }
 
     private static byte[] NeutralDualSenseReport() {
-        byte[] report = new byte[11];
+        byte[] report = new byte[64];
         report[0] = 0x01;
         report[1] = 128;
         report[2] = 128;
