@@ -61,10 +61,10 @@ internal enum ControllerProfile {
 internal sealed class Config {
     public bool Enabled = true;
     public double MouseSensitivity = 1.0;
-    public double MouseMaxSpeed = 16.0;
+    public double MouseMaxSpeed = 13.0;
     public double RightStickDeadzone = 0.05;
     public string RightStickCurve = "power";
-    public double RightStickCurveExponent = 2.4;
+    public double RightStickCurveExponent = 3.0;
     public double LeftStickEnterDeadzone = 0.50;
     public double LeftStickExitDeadzone = 0.45;
     public double TriggerPressThreshold = 0.35;
@@ -137,8 +137,8 @@ internal sealed class Config {
                 shouldSaveMigratedConfig = true;
             }
             if (cfg.RightStickCurveExponent <= 0.0 || Double.IsNaN(cfg.RightStickCurveExponent) || Double.IsInfinity(cfg.RightStickCurveExponent)) {
-                Logger.Warn("invalid rightStickCurveExponent; using 2.4");
-                cfg.RightStickCurveExponent = 2.4;
+                Logger.Warn("invalid rightStickCurveExponent; using 3.0");
+                cfg.RightStickCurveExponent = 3.0;
                 shouldSaveMigratedConfig = true;
             }
             if (!text.Contains("\"baseRepeatSlowIntervalMs\"") ||
@@ -163,6 +163,16 @@ internal sealed class Config {
             if (cfg.ComboLayerWindowMs == 100) {
                 Logger.Info("migrating comboLayerWindowMs from 100 to 80");
                 cfg.ComboLayerWindowMs = 80;
+                shouldSaveMigratedConfig = true;
+            }
+            if (Math.Abs(cfg.MouseMaxSpeed - 16.0) < 0.000001) {
+                Logger.Info("migrating mouseMaxSpeed from 16.0 to 13.0");
+                cfg.MouseMaxSpeed = 13.0;
+                shouldSaveMigratedConfig = true;
+            }
+            if (Math.Abs(cfg.RightStickCurveExponent - 2.4) < 0.000001) {
+                Logger.Info("migrating rightStickCurveExponent from 2.4 to 3.0");
+                cfg.RightStickCurveExponent = 3.0;
                 shouldSaveMigratedConfig = true;
             }
             if (Math.Abs(cfg.LeftStickEnterDeadzone - 0.30) < 0.000001) {
