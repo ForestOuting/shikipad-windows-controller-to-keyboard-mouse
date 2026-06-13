@@ -1173,11 +1173,11 @@ internal sealed class MapperForm : Form {
     private double _mouseAccumX;
     private double _mouseAccumY;
     private double _mouseFreezeUntilMs;
+    private bool _fnArmed;
     private bool _leftMouseDown;
     private bool _rightMouseDown;
     private List<PhysicalKey> _accumulatedModifiers = new List<PhysicalKey>();
     private List<PhysicalKey> _heldLeftStickKeys = new List<PhysicalKey>();
-    private List<PhysicalKey> _activeFnKeys = new List<PhysicalKey>();
     private bool _prevTouchClick;
     private double _disableStartMs;
     private bool _disableArmed = true;
@@ -1329,6 +1329,9 @@ internal sealed class MapperForm : Form {
         if (next != previous) {
             _leftDirection = next;
             _scrollNextMs = 0;
+            if (_leftDirection == StickDirection.UpRight) {
+                _fnArmed = true;
+            }
         }
 
         bool touchJustPressed = s.TouchClick && !_prevTouchClick;
@@ -1340,7 +1343,6 @@ internal sealed class MapperForm : Form {
             foreach (var key in _heldLeftStickKeys) {
                 AccumulateLeftStickKey(key);
             }
-            _activeFnKeys.Clear();
         }
 
         if (_leftDirection != StickDirection.None && _leftDirection != StickDirection.Up && _leftDirection != StickDirection.Down) {
@@ -1354,7 +1356,6 @@ internal sealed class MapperForm : Form {
                     desiredKeys.AddRange(_accumulatedModifiers);
                 } else {
                     AddUnique(desiredKeys, rawStickKey);
-                    foreach (var key in _activeFnKeys) AddUnique(desiredKeys, key);
                 }
             }
         } else {
@@ -1362,7 +1363,6 @@ internal sealed class MapperForm : Form {
                 desiredKeys.AddRange(_accumulatedModifiers);
             } else {
                 _accumulatedModifiers.Clear();
-                _activeFnKeys.Clear();
             }
         }
 
@@ -1420,8 +1420,9 @@ internal sealed class MapperForm : Form {
     }
 
     private PhysicalKey ApplyFnLayer(PhysicalKey key) {
-        if (_leftDirection != StickDirection.UpRight) return key;
-        return TranslateToFKey(key);
+        if (!_fnArmed) return key;
+        PhysicalKey fKey = TranslateToFKey(key);
+        return fKey != PhysicalKey.None ? fKey : key;
     }
 
     private static bool IsFunctionKey(PhysicalKey key) {
@@ -1438,26 +1439,6 @@ internal sealed class MapperForm : Form {
         AddUnique(_accumulatedModifiers, key);
     }
 
-    private void ActivateFnKey(PhysicalKey key, bool touchDown) {
-        if (!IsFunctionKey(key)) return;
-
-        if (touchDown) {
-            AccumulateLeftStickKey(key);
-            return;
-        }
-
-        if (!_activeFnKeys.Contains(key)) {
-            _activeFnKeys.Add(key);
-        }
-
-        if (!_heldLeftStickKeys.Contains(key)) {
-            _injector.CurrentSource = "LeftStickFn";
-            _injector.CurrentReason = "Fn " + key;
-            _injector.KeyDown(key);
-            _heldLeftStickKeys.Add(key);
-        }
-    }
-
     private void UpdateActionButtons(ControllerState s, double now) {
         bool[] currentDown = new bool[] { s.Up, s.Right, s.Square, s.Triangle, s.Left, s.Down, s.Cross, s.Circle };
         Layer layer = _mapping.Resolve(s.L1, s.R1, _l2Pressed, _r2Pressed, _l1DownMs, _r1DownMs, _l2DownMs, _r2DownMs, _config.ComboLayerWindowMs);
@@ -1467,7 +1448,6 @@ internal sealed class MapperForm : Form {
             bool prev = _prevDown[i];
             bool curr = currentDown[i];
             ButtonHold hold = _holds[i];
-            bool touchChargingFn = s.TouchClick && _leftDirection == StickDirection.UpRight;
             PhysicalKey layerKey = ApplyFnLayer(_mapping.Lookup(layer, (ActionButton)i));
 
             if (hold.Pending) {
@@ -1488,23 +1468,9 @@ internal sealed class MapperForm : Form {
                     ? hold.PendingLayer
                     : (releasedPending ? hold.PendingLayer : layer);
                 PhysicalKey resolvedLayerKey = ApplyFnLayer(_mapping.Lookup(resolvedLayer, (ActionButton)i));
-                if (IsFunctionKey(resolvedLayerKey)) {
-                    ActivateFnKey(resolvedLayerKey, s.TouchClick);
-                    if (!releasedPending) {
-                        hold.Key = resolvedLayerKey;
-                        hold.KeyLayer = resolvedLayer;
-                        hold.KeyIsDown = false;
-                        hold.SuppressUntilRelease = true;
-                        hold.Pending = false;
-                        hold.PendingReleased = false;
-                        _holds[i] = hold;
-                    } else {
-                        _holds[i] = new ButtonHold();
-                    }
-                    _prevDown[i] = curr;
-                    continue;
-                } else if (resolvedLayerKey != PhysicalKey.None) {
-                    if (resolvedLayer != Layer.Base) {
+                if (resolvedLayerKey != PhysicalKey.None) {
+                    _fnArmed = false;
+                    if (resolvedLayer != Layer.Base || IsFunctionKey(resolvedLayerKey)) {
                         TapActionKey(i, resolvedLayerKey, "Button " + ActionButtonName(i) + " virtual tap");
                         if (!releasedPending) {
                             hold.Pending = false;
@@ -1556,21 +1522,17 @@ internal sealed class MapperForm : Form {
                     continue;
                 }
 
-                if (IsFunctionKey(key)) {
-                    ActivateFnKey(key, s.TouchClick);
-                    hold.Key = key;
-                    hold.KeyIsDown = false;
-                    hold.SuppressUntilRelease = true;
-                    _holds[i] = hold;
-                    _prevDown[i] = curr;
-                    continue;
-                }
-                
                 hold.Key = key;
                 hold.KeyIsDown = false;
 
                 if (key != PhysicalKey.None) {
-                    PressActionKey(i, key, "Button " + ActionButtonName(i), ref hold, layer, layer == Layer.Base, now);
+                    _fnArmed = false;
+                    if (layer != Layer.Base || IsFunctionKey(key)) {
+                        TapActionKey(i, key, "Button " + ActionButtonName(i) + " virtual tap");
+                        hold.SuppressUntilRelease = true;
+                    } else {
+                        PressActionKey(i, key, "Button " + ActionButtonName(i), ref hold, layer, layer == Layer.Base, now);
+                    }
                 }
                 
                 _holds[i] = hold;
@@ -1582,10 +1544,6 @@ internal sealed class MapperForm : Form {
                 _holds[i] = new ButtonHold();
             } else if (prev && curr) {
                 if (hold.SuppressUntilRelease) {
-                    PhysicalKey key = layerKey;
-                    if (touchChargingFn && IsFunctionKey(key)) {
-                        AccumulateLeftStickKey(key);
-                    }
                     _holds[i] = hold;
                     _prevDown[i] = curr;
                     continue;
@@ -1623,29 +1581,23 @@ internal sealed class MapperForm : Form {
                         hold.KeyIsDown = false;
                     }
 
-                    if (IsFunctionKey(currentLayerKey)) {
-                        ActivateFnKey(currentLayerKey, s.TouchClick);
-                        hold.Key = currentLayerKey;
-                        hold.KeyLayer = layer;
-                        hold.SuppressUntilRelease = true;
-                        _holds[i] = hold;
-                        _prevDown[i] = curr;
-                        continue;
-                    }
-
-                    if (layer != Layer.Base && currentLayerKey != PhysicalKey.None) {
-                        TapActionKey(i, currentLayerKey, "Button " + ActionButtonName(i) + " layer change virtual tap");
-                        hold.Key = currentLayerKey;
-                        hold.KeyLayer = layer;
-                        hold.KeyIsDown = false;
-                        hold.RepeatEnabled = false;
-                        hold.SuppressUntilRelease = true;
-                        _holds[i] = hold;
-                        _prevDown[i] = curr;
-                        continue;
+                    if (layer != Layer.Base || IsFunctionKey(currentLayerKey)) {
+                        if (currentLayerKey != PhysicalKey.None) {
+                            _fnArmed = false;
+                            TapActionKey(i, currentLayerKey, "Button " + ActionButtonName(i) + " layer change virtual tap");
+                            hold.Key = currentLayerKey;
+                            hold.KeyLayer = layer;
+                            hold.KeyIsDown = false;
+                            hold.RepeatEnabled = false;
+                            hold.SuppressUntilRelease = true;
+                            _holds[i] = hold;
+                            _prevDown[i] = curr;
+                            continue;
+                        }
                     }
 
                     if (currentLayerKey != PhysicalKey.None) {
+                        _fnArmed = false;
                         PressActionKey(i, currentLayerKey, "Button " + ActionButtonName(i) + " layer change press", ref hold, layer, layer == Layer.Base, now);
                     }
 
@@ -1880,7 +1832,7 @@ internal sealed class MapperForm : Form {
         _scrollNextMs = 0;
         _heldLeftStickKeys.Clear();
         _accumulatedModifiers.Clear();
-        _activeFnKeys.Clear();
+        _fnArmed = false;
         for (int i = 0; i < _holds.Length; i++) _holds[i] = new ButtonHold();
         for (int i = 0; i < _prevDown.Length; i++) _prevDown[i] = false;
         _prevL1 = false;
