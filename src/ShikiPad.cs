@@ -67,8 +67,8 @@ internal sealed class Config {
     public double RightStickDeadzone = 0.05;
     public string RightStickCurve = "power";
     public double RightStickCurveExponent = 2.0;
-    public double LeftStickEnterDeadzone = 0.35;
-    public double LeftStickExitDeadzone = 0.30;
+    public double LeftStickEnterDeadzone = 0.50;
+    public double LeftStickExitDeadzone = 0.45;
     public double TriggerPressThreshold = 0.35;
     public double TriggerReleaseThreshold = 0.25;
     public int RepeatDelayMs = 180;
@@ -182,14 +182,14 @@ internal sealed class Config {
                 cfg.ScrollFastIntervalMs = 6;
                 shouldSaveMigratedConfig = true;
             }
-            if (Math.Abs(cfg.LeftStickEnterDeadzone - 0.50) < 0.000001 || Math.Abs(cfg.LeftStickEnterDeadzone - 0.30) < 0.000001) {
-                Logger.Info("migrating leftStickEnterDeadzone to 0.35");
-                cfg.LeftStickEnterDeadzone = 0.35;
+            if (Math.Abs(cfg.LeftStickEnterDeadzone - 0.35) < 0.000001 || Math.Abs(cfg.LeftStickEnterDeadzone - 0.30) < 0.000001) {
+                Logger.Info("migrating leftStickEnterDeadzone back to 0.50");
+                cfg.LeftStickEnterDeadzone = 0.50;
                 shouldSaveLeftStickConfig = true;
             }
-            if (Math.Abs(cfg.LeftStickExitDeadzone - 0.20) < 0.000001 || Math.Abs(cfg.LeftStickExitDeadzone - 0.45) < 0.000001 || Math.Abs(cfg.LeftStickExitDeadzone - 0.35) < 0.000001) {
-                Logger.Info("migrating leftStickExitDeadzone to 0.30");
-                cfg.LeftStickExitDeadzone = 0.30;
+            if (Math.Abs(cfg.LeftStickExitDeadzone - 0.30) < 0.000001 || Math.Abs(cfg.LeftStickExitDeadzone - 0.20) < 0.000001) {
+                Logger.Info("migrating leftStickExitDeadzone back to 0.45");
+                cfg.LeftStickExitDeadzone = 0.45;
                 shouldSaveLeftStickConfig = true;
             }
             if (shouldSaveMigratedConfig || shouldSaveLeftStickConfig) cfg.Save(path);
@@ -1938,14 +1938,45 @@ internal static class Program {
         int width = GetConsoleWidth();
         int panelWidth = Math.Min(104, Math.Max(66, width - 6));
         bool zh = IsChineseUi();
+        int left = (width - panelWidth) / 2;
 
         string[] logo = BuildShikiPadLogo();
         Console.WriteLine();
-        WriteNeonRule(width, panelWidth, zh ? "ShikiPad \u63a7\u5236\u754c\u9762" : "ShikiPad Control Surface");
+
+        // top decorative rail
+        Console.Write(new string(' ', left));
+        WriteGradientText("╭" + new string('─', panelWidth - 2) + "╮", SeasonFlowStops());
         Console.WriteLine();
+
+        // title
+        WriteNeonRule(width, panelWidth, zh ? "ShikiPad 控制界面" : "ShikiPad Control Surface");
+
+        // thin separator
+        Console.Write(new string(' ', left));
+        WriteGradientText(RepeatPattern("┈", panelWidth), SeasonFlowStops());
+        Console.WriteLine();
+        Console.WriteLine();
+
+        // logo
         WriteExtrudedLogo(width, logo, SeasonFlowStops());
         Console.WriteLine();
+
+        // tagline
+        string tagline = zh
+            ? "◇  物理按键  ·  鼠标曲线  ·  触控板蓄力  ◇"
+            : "◇  physical keys  ·  mouse curve  ·  touch clutch  ◇";
+        Console.Write(new string(' ', left));
+        WriteGradientText(CenterLine(panelWidth, tagline), SeasonFlowStops());
+        Console.WriteLine();
+
+        // status line
         WriteMinimalStatus(width, panelWidth, zh);
+
+        // bottom decorative rail
+        Console.Write(new string(' ', left));
+        WriteGradientText("╰" + new string('─', panelWidth - 2) + "╯", SeasonFlowStops());
+        Console.WriteLine();
+        WriteSeasonDropShadow(width, panelWidth);
         Console.WriteLine("\x1b[0m");
     }
 
@@ -2551,6 +2582,25 @@ internal static class Program {
         Console.WriteLine();
     }
 
+    private static void WriteControllerPairLine(int width, int panelWidth, string leftLabel, string rightLabel, Rgb color) {
+        int left = (width - panelWidth) / 2;
+        int inner = panelWidth - 2;
+        int gap = 3;
+        int column = (inner - gap) / 2;
+
+        Console.Write(new string(' ', left));
+        WriteRgb(new Rgb(72, 91, 101), "\u2502");
+        Console.Write("\x1b[1m");
+        WriteRgb(color, PadRight("  " + leftLabel, column));
+        Console.Write("\x1b[22m");
+        WriteRgb(new Rgb(72, 91, 101), " \u2506 ");
+        Console.Write("\x1b[1m");
+        WriteRgb(color, PadRight("  " + rightLabel, inner - column - gap));
+        Console.Write("\x1b[22m");
+        WriteRgb(new Rgb(72, 91, 101), "\u2502");
+        Console.WriteLine();
+    }
+
     private static string PadRight(string text, int width) {
         if (width <= 0) return "";
         int textWidth = DisplayWidth(text);
@@ -2750,16 +2800,12 @@ internal static class Program {
         bool zh = IsChineseUi();
         Console.WriteLine();
         WriteSeasonPanelBorder(width, panelWidth, true);
-        WriteSeasonPanelTitle(width, panelWidth, zh ? "\u25c7 \u9009\u62e9\u624b\u67c4\u578b\u53f7 \u25c7" : "\u25c7 CONTROLLER PROFILE \u25c7");
+        WriteSeasonPanelTitle(width, panelWidth, zh ? "◇ 选择手柄型号 ◇" : "◇ CONTROLLER PROFILE ◇");
         WriteSeasonPanelSeparator(width, panelWidth);
-        WritePanelLine(width, panelWidth, "  [1] DualSense (USB)", zh ? "PS5 / Direct HID / 触控板蓄力" : "PS5 / Direct HID / touchpad clutch", SeasonSummer(), new Rgb(245, 250, 255));
-        WritePanelLine(width, panelWidth, "  [2] DualSense (BT)", zh ? "PS5 蓝牙专属模式" : "PS5 Bluetooth / strict isolation", SeasonSummer(), new Rgb(245, 250, 255));
-        WritePanelLine(width, panelWidth, "  [3] DualShock 4 (USB)", zh ? "PS4 / Direct HID / 触控板蓄力" : "PS4 / Direct HID / touchpad clutch", new Rgb(100, 180, 255), new Rgb(245, 250, 255));
-        WritePanelLine(width, panelWidth, "  [4] DualShock 4 (BT)", zh ? "PS4 蓝牙专属模式" : "PS4 Bluetooth / strict isolation", new Rgb(100, 180, 255), new Rgb(245, 250, 255));
-        WritePanelLine(width, panelWidth, "  [5] Xbox 360 (USB)", zh ? "XInput / View 或 Menu 蓄力" : "XInput / View or Menu touchpad clutch", SeasonSpring(), new Rgb(245, 250, 255));
-        WritePanelLine(width, panelWidth, "  [6] Xbox 360 (BT)", zh ? "蓝牙模式 / XInput" : "XInput / Bluetooth", SeasonSpring(), new Rgb(245, 250, 255));
-        WritePanelLine(width, panelWidth, "  [7] Xbox Series X|S (USB)", zh ? "XInput / View 或 Menu 蓄力" : "XInput / View or Menu touchpad clutch", SeasonGold(), new Rgb(245, 250, 255));
-        WritePanelLine(width, panelWidth, "  [8] Xbox Series X|S (BT)", zh ? "蓝牙模式 / XInput" : "XInput / Bluetooth", SeasonGold(), new Rgb(245, 250, 255));
+        WriteControllerPairLine(width, panelWidth, "[1] DualSense", "[2] DualSense (BT)", SeasonSummer());
+        WriteControllerPairLine(width, panelWidth, "[3] DualShock 4", "[4] DualShock 4 (BT)", new Rgb(100, 180, 255));
+        WriteControllerPairLine(width, panelWidth, "[5] Xbox 360", "[6] Xbox 360 (BT)", SeasonSpring());
+        WriteControllerPairLine(width, panelWidth, "[7] Xbox Series X|S", "[8] Xbox Series (BT)", SeasonGold());
         WriteSeasonPanelBorder(width, panelWidth, false);
         WriteSeasonDropShadow(width, panelWidth);
         Console.WriteLine();
