@@ -34,6 +34,7 @@ internal sealed class MapperForm : Form {
     private List<PhysicalKey> _accumulatedModifiers = new List<PhysicalKey>();
     private List<PhysicalKey> _desiredLeftStickKeys = new List<PhysicalKey>();
     private List<PhysicalKey> _pressedLeftStickKeys = new List<PhysicalKey>();
+    private readonly List<PhysicalKey> _pendingLeftStickModifierTaps = new List<PhysicalKey>();
     private readonly ClutchButtonStateMachine _clutchButton = new ClutchButtonStateMachine();
     private TouchGestureState _touchGesture = new TouchGestureState();
     private bool _touchAltTabAltDown;
@@ -56,17 +57,23 @@ internal sealed class MapperForm : Form {
     private bool _clutchToggleActionReleases;
     private bool _createKeyDown;
     private bool _optionsKeyDown;
+    private bool _createPendingTap;
+    private bool _optionsPendingTap;
     private volatile bool _manualVisible;
     private double _lastTickMs;
     private double _lastTickExceptionLogMs = -10000.0;
     private OutputModule _tickOutputOwner = OutputModule.None;
+    private OutputModule _tickOutputStage = OutputModule.None;
+    private int _lastOutputStagePriority = Int32.MaxValue;
 
     public MapperForm(Config config) {
+        if (config == null) throw new ArgumentNullException(nameof(config));
+        config.Validate();
         _config = config;
         _hid = new DirectHidController();
         _debugSources = false;
         _enabled = config.Enabled;
-        _injector = new InputInjector(config.UseScanCode);
+        _injector = new InputInjector();
         ShowInTaskbar = false;
         WindowState = FormWindowState.Minimized;
         FormBorderStyle = FormBorderStyle.FixedToolWindow;
@@ -77,11 +84,6 @@ internal sealed class MapperForm : Form {
         base.OnLoad(e);
         _hid.StateUpdated += OnStateUpdated;
         _hid.Start();
-        int parentId = 0;
-        try {
-            var pc = new System.Diagnostics.PerformanceCounter("Process", "Creating Process ID", Process.GetCurrentProcess().ProcessName);
-            parentId = (int)pc.NextValue();
-        } catch { }
 
         _lastTickMs = NowMs();
         _pollRunning = true;
@@ -169,7 +171,12 @@ internal sealed class MapperForm : Form {
         NativeMethods.timeEndPeriod(1);
         _hid.StateUpdated -= OnStateUpdated;
         _hid.Stop();
-        ReleaseRuntimeHolds();
+        try {
+            ReleaseRuntimeHolds();
+        } catch (Exception ex) {
+            try { _injector.ReleaseAll(); } catch { }
+            LogTickException(ex);
+        }
 
         base.OnFormClosing(e);
     }
@@ -220,6 +227,8 @@ internal sealed class MapperForm : Form {
         double deltaSec = Clamp((now - _lastTickMs) / 1000.0, 0.0, MaxMouseFrameSeconds);
         _lastTickMs = now;
         _tickOutputOwner = OutputModule.None;
+        _tickOutputStage = OutputModule.None;
+        _lastOutputStagePriority = Int32.MaxValue;
 
         bool preL1 = _prevL1;
         bool preR1 = _prevR1;
@@ -253,22 +262,42 @@ internal sealed class MapperForm : Form {
         MarkActiveLayerOverlap();
         UpdateClutchButton(s, now);
         UpdateLeftStick(s, now);
+
+        BeginOutputStage(OutputModule.TouchpadClick);
         UpdateTouchpadClick(s, now);
+        BeginOutputStage(OutputModule.TouchGesture);
         UpdateTouchGestures(s, now);
+        BeginOutputStage(OutputModule.ModifierKeys);
         FlushPendingModifierKeys();
 
         UpdateMouseButtons(s, now);
+        BeginOutputStage(OutputModule.StickClicks);
         FlushPendingMouseButtons(s, now);
+        BeginOutputStage(OutputModule.ActionButtons);
         UpdateActionButtons(s, now);
+        BeginOutputStage(OutputModule.LeftStickScroll);
         UpdateLeftStickScroll(s, deltaSec);
+        BeginOutputStage(OutputModule.RightStickPointer);
         UpdateRightStick(s, now, deltaSec);
         ClearInactiveLayerOverlapFlags(s);
     }
 
     private bool TryClaimTickOutput(OutputModule module) {
+        if (module != _tickOutputStage) {
+            throw new InvalidOperationException("输出模块 " + module + " 在 " + _tickOutputStage + " 阶段尝试占用通道。");
+        }
         if (!CanUseTickOutputLane(_tickOutputOwner, module)) return false;
         if (_tickOutputOwner == OutputModule.None) _tickOutputOwner = module;
         return true;
+    }
+
+    private void BeginOutputStage(OutputModule module) {
+        int priority = OutputModulePriority(module);
+        if (module == OutputModule.None || priority >= _lastOutputStagePriority) {
+            throw new InvalidOperationException("输出模块阶段顺序无效：" + module + "。");
+        }
+        _tickOutputStage = module;
+        _lastOutputStagePriority = priority;
     }
 
     internal static bool CanUseTickOutputLane(OutputModule currentOwner, OutputModule requestedOwner) {
@@ -392,6 +421,11 @@ internal sealed class MapperForm : Form {
             }
         }
 
+        foreach (PhysicalKey key in _desiredLeftStickKeys) {
+            if (ShouldQueueDeferredModifierTap(true, _pressedLeftStickKeys.Contains(key), desiredKeys.Contains(key))) {
+                AddUnique(_pendingLeftStickModifierTaps, key);
+            }
+        }
         for (int i = _pressedLeftStickKeys.Count - 1; i >= 0; i--) {
             PhysicalKey key = _pressedLeftStickKeys[i];
             if (!desiredKeys.Contains(key)) {
@@ -412,7 +446,7 @@ internal sealed class MapperForm : Form {
     }
 
     private void FlushPendingModifierKeys() {
-        bool hasPendingOutput = false;
+        bool hasPendingOutput = _pendingLeftStickModifierTaps.Count > 0 || _createPendingTap || _optionsPendingTap;
         foreach (PhysicalKey key in _desiredLeftStickKeys) {
             if (!_pressedLeftStickKeys.Contains(key)) {
                 hasPendingOutput = true;
@@ -423,6 +457,11 @@ internal sealed class MapperForm : Form {
         hasPendingOutput |= _prevOptions && !_optionsKeyDown;
         if (!hasPendingOutput || !TryClaimTickOutput(OutputModule.ModifierKeys)) return;
 
+        foreach (PhysicalKey key in _pendingLeftStickModifierTaps) {
+            EmitDeferredModifierTap("LeftStick", key);
+        }
+        _pendingLeftStickModifierTaps.Clear();
+
         foreach (PhysicalKey key in _desiredLeftStickKeys) {
             if (_pressedLeftStickKeys.Contains(key)) continue;
             _injector.CurrentSource = "LeftStick";
@@ -431,11 +470,22 @@ internal sealed class MapperForm : Form {
             _pressedLeftStickKeys.Add(key);
         }
 
-        FlushPendingSystemModifier("Share/Create", PhysicalKey.RAlt, _prevCreate, ref _createKeyDown);
-        FlushPendingSystemModifier("Options/Menu", PhysicalKey.RCtrl, _prevOptions, ref _optionsKeyDown);
+        FlushPendingSystemModifier("Share/Create", PhysicalKey.RAlt, _prevCreate, ref _createKeyDown, ref _createPendingTap);
+        FlushPendingSystemModifier("Options/Menu", PhysicalKey.RCtrl, _prevOptions, ref _optionsKeyDown, ref _optionsPendingTap);
     }
 
-    private void FlushPendingSystemModifier(string source, PhysicalKey key, bool logicallyDown, ref bool outputDown) {
+    private void EmitDeferredModifierTap(string source, PhysicalKey key) {
+        _injector.CurrentSource = source;
+        _injector.CurrentReason = "DeferredModifierTap " + key;
+        _injector.KeyDown(key);
+        _injector.KeyUp(key);
+    }
+
+    private void FlushPendingSystemModifier(string source, PhysicalKey key, bool logicallyDown, ref bool outputDown, ref bool pendingTap) {
+        if (pendingTap) {
+            EmitDeferredModifierTap(source, key);
+            pendingTap = false;
+        }
         if (!logicallyDown || outputDown) return;
         _injector.CurrentSource = source;
         _injector.CurrentReason = source + " press";
@@ -1514,7 +1564,7 @@ internal sealed class MapperForm : Form {
                 }
                 UpdatePendingLayer(ref hold, layer, layerMs, now);
 
-                bool shouldFlushPending = now - hold.PendingSinceMs >= Math.Max(0, _config.ActionLayerGraceMs) &&
+                bool shouldFlushPending = now - hold.PendingSinceMs >= PendingActionDecisionDelayMs(_config) &&
                     !ShouldWaitForPendingSingleLayerToSettle(hold, now);
                 if (!shouldFlushPending) {
                     _holds[i] = hold;
@@ -1674,7 +1724,15 @@ internal sealed class MapperForm : Form {
     }
 
     private bool ShouldDeferInitialAction(Layer initialLayer) {
-        return _config.ActionLayerGraceMs > 0;
+        return PendingActionDecisionDelayMs(_config) > 0.0;
+    }
+
+    internal static double PendingActionDecisionDelayMs(Config config) {
+        return Math.Max(Math.Max(0.0, (double)config.ActionLayerGraceMs), Math.Max(0.0, (double)config.ModifierBindingWindowMs));
+    }
+
+    internal static bool ShouldQueueDeferredModifierTap(bool wasLogicallyDown, bool outputDown, bool isLogicallyDown) {
+        return wasLogicallyDown && !outputDown && !isLogicallyDown;
     }
 
     internal static bool IsWithinModifierBindingWindow(double actionDownMs, double modifierDownMs, Config config) {
@@ -2377,8 +2435,8 @@ internal sealed class MapperForm : Form {
     }
 
     private void UpdateSystemButtonReleases(ControllerState s) {
-        UpdateMappedSystemButtonRelease("Share/Create", s.Create, PhysicalKey.RAlt, ref _prevCreate, ref _createKeyDown);
-        UpdateMappedSystemButtonRelease("Options/Menu", s.Options, PhysicalKey.RCtrl, ref _prevOptions, ref _optionsKeyDown);
+        UpdateMappedSystemButtonRelease("Share/Create", s.Create, PhysicalKey.RAlt, ref _prevCreate, ref _createKeyDown, ref _createPendingTap);
+        UpdateMappedSystemButtonRelease("Options/Menu", s.Options, PhysicalKey.RCtrl, ref _prevOptions, ref _optionsKeyDown, ref _optionsPendingTap);
     }
 
     private void UpdateMappedSystemButtonPress(bool down, PhysicalKey key, double now, ref bool prevDown) {
@@ -2388,13 +2446,15 @@ internal sealed class MapperForm : Form {
         }
     }
 
-    private void UpdateMappedSystemButtonRelease(string source, bool down, PhysicalKey key, ref bool prevDown, ref bool keyDown) {
+    private void UpdateMappedSystemButtonRelease(string source, bool down, PhysicalKey key, ref bool prevDown, ref bool keyDown, ref bool pendingTap) {
         if (!down && prevDown) {
             if (keyDown) {
                 _injector.CurrentSource = source;
                 _injector.CurrentReason = source + " release";
                 _injector.KeyUp(key);
                 keyDown = false;
+            } else if (ShouldQueueDeferredModifierTap(prevDown, keyDown, down)) {
+                pendingTap = true;
             }
             prevDown = false;
         }
@@ -2458,6 +2518,7 @@ internal sealed class MapperForm : Form {
         _leftStickScroll.Reset();
         _desiredLeftStickKeys.Clear();
         _pressedLeftStickKeys.Clear();
+        _pendingLeftStickModifierTaps.Clear();
         _accumulatedModifiers.Clear();
         DeactivateCapsFnLayer("Runtime release Caps/Fn layer");
         for (int i = 0; i < _holds.Length; i++) _holds[i] = new ButtonHold();
@@ -2500,6 +2561,8 @@ internal sealed class MapperForm : Form {
         _rightStickMouse.Reset();
         _createKeyDown = false;
         _optionsKeyDown = false;
+        _createPendingTap = false;
+        _optionsPendingTap = false;
         _muteDownMs = 0.0;
     }
 

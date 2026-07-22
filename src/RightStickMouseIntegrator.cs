@@ -37,7 +37,7 @@ internal sealed class RightStickMouseIntegrator {
         double normalizedRadius = Clamp((radius - config.RightStickDeadzone) / (1.0 - config.RightStickDeadzone), 0.0, 1.0);
         double dirX = x / actualRadius;
         double dirY = y / actualRadius;
-        double powerRatio = Math.Pow(normalizedRadius, config.RightStickCurveExponent);
+        double powerRatio = ApplyResponseCurve(normalizedRadius, config.RightStickCurve, config.RightStickCurveExponent);
         double speed = config.MouseMaxSpeed * deltaSec * 120.0 * config.MouseSensitivity;
         double rawDx = dirX * powerRatio * speed;
         double rawDy = dirY * powerRatio * speed;
@@ -48,6 +48,11 @@ internal sealed class RightStickMouseIntegrator {
         dx = TakeRoundedMouseDelta(ref _accumX);
         dy = TakeRoundedMouseDelta(ref _accumY);
         return dx != 0 || dy != 0;
+    }
+
+    internal static double ApplyResponseCurve(double normalizedRadius, string curve, double exponent) {
+        if (String.Equals(curve, "linear", StringComparison.OrdinalIgnoreCase)) return normalizedRadius;
+        return Math.Pow(normalizedRadius, exponent);
     }
 
     private void SmoothInput(ref double x, ref double y, double deltaSec, double smoothingMs) {

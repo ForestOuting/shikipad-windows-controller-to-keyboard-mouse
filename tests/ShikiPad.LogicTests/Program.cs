@@ -15,10 +15,12 @@ static class Program {
         VerifyRepeatStepSettlement(assembly, mapper, directionType);
         VerifyTwoFingerContinuationKeepsStaticFinger(assembly, mapper);
         VerifyTouchpadClicks(assembly, mapper);
+        VerifyHidReportParsing(assembly);
         VerifyModifierActionWindow(assembly, mapper);
         VerifyCapsFnTranslation(assembly, mapper);
         VerifyLeftStickSectors(mapper);
         VerifyOutputModulePriority(assembly, mapper);
+        VerifyConfigurationGuards(assembly);
         VerifyPureBaseAndLayerSelection(assembly, mapper);
         NotNull(mapper.GetMethod("UpdateTwoFingerContinuationRepeat", BindingFlags.NonPublic | BindingFlags.Instance), "two-finger continuation update remains available");
         NotNull(mapper.GetMethod("TryRecognizeTwoFingerContinuationGesture", PrivateStatic), "two-finger continuation recognition remains available");
@@ -75,6 +77,19 @@ static class Program {
         Equal(false, withinWindow.Invoke(null, new[] { (object)100.0, 145.01, configWithWindow(configType, 45) }), "later modifier is excluded");
         Equal(false, withinWindow.Invoke(null, new[] { (object)100.0, 99.0, configWithWindow(configType, 45) }), "modifier before action is not a late-window arrival");
 
+        MethodInfo decisionDelay = RequiredMethod(mapper, "PendingActionDecisionDelayMs");
+        object independentWindowConfig = Activator.CreateInstance(configType);
+        configType.GetField("ActionLayerGraceMs").SetValue(independentWindowConfig, 0);
+        configType.GetField("ModifierBindingWindowMs").SetValue(independentWindowConfig, 45);
+        Equal(45.0, decisionDelay.Invoke(null, new[] { independentWindowConfig }), "modifier binding remains a full 45 ms when pure layer grace is zero");
+        configType.GetField("ActionLayerGraceMs").SetValue(independentWindowConfig, 60);
+        Equal(60.0, decisionDelay.Invoke(null, new[] { independentWindowConfig }), "longer pure layer grace remains fully observed");
+
+        MethodInfo retainDeferredTap = RequiredMethod(mapper, "ShouldQueueDeferredModifierTap");
+        Equal(true, retainDeferredTap.Invoke(null, new object[] { true, false, false }), "a modifier released before physical output is retained as a deferred tap");
+        Equal(false, retainDeferredTap.Invoke(null, new object[] { true, true, false }), "an already-output modifier uses its ordinary KeyUp path");
+        Equal(false, retainDeferredTap.Invoke(null, new object[] { true, false, true }), "a still-held deferred modifier remains a pending hold");
+
         MethodInfo isModifier = RequiredMethod(mapper, "IsModifierBindingKey");
         string[] included = { "LShift", "LCtrl", "LWin", "LAlt", "RAlt", "RCtrl" };
         foreach (string name in included) {
@@ -118,6 +133,9 @@ static class Program {
         Equal(false, shouldDeactivateCapsFn.Invoke(null, new object[] { false }), "an untranslated action preserves Caps/Fn mode");
 
         VerifyPendingModifierRegistration(mapper, configType, keyType);
+        NotNull(mapper.GetField("_pendingLeftStickModifierTaps", BindingFlags.NonPublic | BindingFlags.Instance), "left-stick deferred modifier taps have persistent state");
+        NotNull(mapper.GetField("_createPendingTap", BindingFlags.NonPublic | BindingFlags.Instance), "Create deferred tap has persistent state");
+        NotNull(mapper.GetField("_optionsPendingTap", BindingFlags.NonPublic | BindingFlags.Instance), "Options deferred tap has persistent state");
     }
 
     private static void VerifyPendingModifierRegistration(Type mapper, Type configType, Type keyType) {
@@ -234,10 +252,19 @@ static class Program {
 
         object mapperInstance = RuntimeHelpers.GetUninitializedObject(mapper);
         mapper.GetField("_tickOutputOwner", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(mapperInstance, none);
+        mapper.GetField("_tickOutputStage", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(mapperInstance, actions);
         MethodInfo claimLane = mapper.GetMethod("TryClaimTickOutput", BindingFlags.NonPublic | BindingFlags.Instance);
         Equal(true, claimLane.Invoke(mapperInstance, new[] { actions }), "the first output module claims the polling frame");
+        mapper.GetField("_tickOutputStage", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(mapperInstance, scroll);
         Equal(false, claimLane.Invoke(mapperInstance, new[] { scroll }), "a different lower-priority module is deferred in the claimed frame");
+        mapper.GetField("_tickOutputStage", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(mapperInstance, actions);
         Equal(true, claimLane.Invoke(mapperInstance, new[] { actions }), "the owning module can finish its atomic sequence");
+
+        object stagedMapper = RuntimeHelpers.GetUninitializedObject(mapper);
+        mapper.GetField("_lastOutputStagePriority", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(stagedMapper, int.MaxValue);
+        MethodInfo beginStage = mapper.GetMethod("BeginOutputStage", BindingFlags.NonPublic | BindingFlags.Instance);
+        foreach (string name in ordered) beginStage.Invoke(stagedMapper, new[] { Enum.Parse(moduleType, name) });
+        ExpectInvocationFailure(() => beginStage.Invoke(stagedMapper, new[] { actions }), "priority stages reject an out-of-order module");
 
         Type injector = RequiredType(assembly, "InputInjector");
         MethodInfo restoreTap = RequiredMethod(injector, "ShouldRestoreHeldKeyForTap");
@@ -251,6 +278,29 @@ static class Program {
         Equal(false, suspendModifier.Invoke(null, new[] { Enum.Parse(keyType, "RShift"), (object)true, false, false, false }), "a requested Shift group stays held for an exact shortcut");
         Equal(false, suspendModifier.Invoke(null, new[] { Enum.Parse(keyType, "RAlt"), (object)false, false, true, false }), "either Alt side can satisfy an exact Alt shortcut");
         Equal(true, suspendModifier.Invoke(null, new[] { Enum.Parse(keyType, "LWin"), (object)false, false, false, false }), "an unrelated held Win key is suspended around an exact shortcut");
+
+        Type interception = RequiredType(assembly, "InterceptionDriver");
+        Equal(typeof(bool), interception.GetMethod("SendKey").ReturnType, "keyboard injection reports native send success");
+        Equal(typeof(bool), interception.GetMethod("SendMouse").ReturnType, "mouse injection reports native send success");
+    }
+
+    private static void VerifyConfigurationGuards(Assembly assembly) {
+        Type configType = RequiredType(assembly, "Config");
+        MethodInfo validate = configType.GetMethod("Validate");
+        object config = Activator.CreateInstance(configType);
+        validate.Invoke(config, null);
+
+        configType.GetField("RightStickDeadzone").SetValue(config, 1.0);
+        ExpectInvocationFailure(() => validate.Invoke(config, null), "right-stick deadzone cannot make normalization divide by zero");
+
+        config = Activator.CreateInstance(configType);
+        configType.GetField("RightStickCurve").SetValue(config, "unknown");
+        ExpectInvocationFailure(() => validate.Invoke(config, null), "unknown right-stick response curves are rejected");
+
+        Type integrator = RequiredType(assembly, "RightStickMouseIntegrator");
+        MethodInfo curve = RequiredMethod(integrator, "ApplyResponseCurve");
+        Equal(0.0625, curve.Invoke(null, new object[] { 0.25, "power", 2.0 }), "power response curve uses the configured exponent");
+        Equal(0.25, curve.Invoke(null, new object[] { 0.25, "linear", 2.0 }), "linear response curve is implemented rather than a dead setting");
     }
 
     private static void VerifyCapsFnStroke(MethodInfo resolve, object instance, Type strokeType, Type keyType, string inputKey, bool inputShift, string expectedKey, bool expectedShift, bool expectedTranslated) {
@@ -623,6 +673,53 @@ static class Program {
         Equal("Backspace", result.GetType().GetField("Key").GetValue(result).ToString(), "two-finger click");
     }
 
+    private static void VerifyHidReportParsing(Assembly assembly) {
+        Type hidType = RequiredType(assembly, "DirectHidController");
+        MethodInfo parse = RequiredMethod(hidType, "TryParseDualSenseReport");
+        byte[] report = new byte[64];
+        report[0] = 0x01;
+        report[1] = 127;
+        report[2] = 127;
+        report[3] = 127;
+        report[4] = 127;
+        report[5] = 128;
+        report[6] = 255;
+        report[8] = 0x10;
+        report[9] = 0x51;
+        report[10] = 0x07;
+        WriteTouchPoint(report, 33, 5, true, 100, 200);
+        WriteTouchPoint(report, 37, 6, false, 0, 0);
+
+        object[] args = { report, null };
+        Equal(true, parse.Invoke(null, args), "a 64-byte USB DualSense report is accepted");
+        object state = args[1];
+        Type stateType = RequiredType(assembly, "ControllerState");
+        Equal(true, stateType.GetField("Connected").GetValue(state), "parsed controller is connected");
+        Equal(true, stateType.GetField("Up").GetValue(state), "USB report d-pad is parsed");
+        Equal(true, stateType.GetField("Square").GetValue(state), "USB report face button is parsed");
+        Equal(true, stateType.GetField("L1").GetValue(state), "USB report shoulder is parsed");
+        Equal(true, stateType.GetField("Create").GetValue(state), "USB report Create is parsed");
+        Equal(true, stateType.GetField("L3").GetValue(state), "USB report L3 is parsed");
+        Equal(true, stateType.GetField("Home").GetValue(state), "USB report Home is parsed");
+        Equal(true, stateType.GetField("TouchClick").GetValue(state), "USB report touch click is parsed");
+        Equal(true, stateType.GetField("Mute").GetValue(state), "USB report Mute is parsed");
+        Equal(1, stateType.GetField("TouchCount").GetValue(state), "one active touch point is counted");
+        Equal(5, stateType.GetField("Touch1Id").GetValue(state), "touch point identity is parsed");
+        Equal(100, stateType.GetField("Touch1X").GetValue(state), "touch point X is parsed");
+        Equal(200, stateType.GetField("Touch1Y").GetValue(state), "touch point Y is parsed");
+
+        args = new object[] { new byte[] { 0x02, 0, 0, 0, 0, 0, 0, 0 }, null };
+        Equal(false, parse.Invoke(null, args), "an unsupported report ID is rejected rather than replaying stale state");
+        Equal(null, args[1], "a rejected report produces no controller state");
+    }
+
+    private static void WriteTouchPoint(byte[] report, int offset, int id, bool active, int x, int y) {
+        report[offset] = (byte)((active ? 0 : 0x80) | (id & 0x7F));
+        report[offset + 1] = (byte)(x & 0xFF);
+        report[offset + 2] = (byte)(((x >> 8) & 0x0F) | ((y & 0x0F) << 4));
+        report[offset + 3] = (byte)((y >> 4) & 0xFF);
+    }
+
     private static string ResolveClick(Type controllerType, MethodInfo resolve, object config, int count, int x, bool active) {
         object state = Activator.CreateInstance(controllerType);
         SetField(controllerType, state, "TouchCount", count);
@@ -650,5 +747,14 @@ static class Program {
 
     private static void NotNull(object value, string name) {
         if (value == null) throw new InvalidOperationException($"{name}: expected non-null value");
+    }
+
+    private static void ExpectInvocationFailure(Action action, string name) {
+        try {
+            action();
+        } catch (TargetInvocationException ex) when (ex.InnerException is InvalidOperationException) {
+            return;
+        }
+        throw new InvalidOperationException($"{name}: expected InvalidOperationException");
     }
 }

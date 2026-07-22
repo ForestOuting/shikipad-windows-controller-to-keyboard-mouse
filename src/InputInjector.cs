@@ -20,15 +20,13 @@ internal sealed class InputInjector {
     private readonly KeyDef _ctrl;
     private readonly KeyDef _alt;
     private readonly KeyDef _win;
-    private readonly bool _useScanCode;
     private bool _leftMouseHeld;
     private bool _rightMouseHeld;
 
     public string CurrentSource = "Unknown";
     public string CurrentReason = "";
 
-    public InputInjector(bool useScanCode) {
-        _useScanCode = useScanCode;
+    public InputInjector() {
         if (!InterceptionDriver.Initialize()) {
             throw new InvalidOperationException("Interception 驱动不可用。请安装驱动、重启 Windows，并以管理员权限运行 ShikiPad。");
         }
@@ -46,7 +44,12 @@ internal sealed class InputInjector {
         for (int i = 0; i < injectors.Length; i++) {
             try {
                 injectors[i].ReleaseAll();
-            } catch {
+            } catch (Exception first) {
+                try {
+                    injectors[i].ReleaseAll();
+                } catch (Exception second) {
+                    try { Console.Error.WriteLine("[warn] 输入释放连续失败：" + first.Message + "；重试：" + second.Message); } catch { }
+                }
             }
         }
     }
@@ -58,15 +61,17 @@ internal sealed class InputInjector {
             if (IsReferenceCountedModifier(key)) {
                 int count;
                 _modifierHoldCounts.TryGetValue(key, out count);
-                _modifierHoldCounts[key] = count + 1;
-                _heldKeys.Add(key);
-                if (count > 0) return;
+                if (count > 0) {
+                    _modifierHoldCounts[key] = count + 1;
+                    return;
+                }
             }
 
             List<INPUT> inputs = new List<INPUT>();
             AddKey(inputs, _keys[key], false);
             Send(inputs, "KeyDown(" + key + ")");
             _heldKeys.Add(key);
+            if (IsReferenceCountedModifier(key)) _modifierHoldCounts[key] = 1;
         }
     }
 
@@ -206,20 +211,15 @@ internal sealed class InputInjector {
                 if (_keys.TryGetValue(key, out def)) AddKey(inputs, def, true);
             }
 
-            AddKey(inputs, _shift, true);
-            AddKey(inputs, _ctrl, true);
-            AddKey(inputs, _alt, true);
-            AddKey(inputs, _win, true);
-
             if (_leftMouseHeld) AddMouseButton(inputs, 0, false);
             if (_rightMouseHeld) AddMouseButton(inputs, 1, false);
 
+            Send(inputs, "ReleaseAll");
             _heldKeys.Clear();
             _modifierHoldCounts.Clear();
             _leftMouseHeld = false;
             _rightMouseHeld = false;
         }
-        Send(inputs, "ReleaseAll");
     }
 
     private static bool IsReferenceCountedModifier(PhysicalKey key) {
@@ -321,15 +321,10 @@ internal sealed class InputInjector {
         input.type = INPUT_KEYBOARD;
         KEYBDINPUT keyboard = new KEYBDINPUT();
 
-        // Always populate wScan so Interception can read it later in Send.
+        // Interception consumes scan codes directly.
         keyboard.wScan = key.Scan;
-        if (_useScanCode) {
-            keyboard.wVk = 0;
-            keyboard.dwFlags = KEYEVENTF_SCANCODE;
-        } else {
-            keyboard.wVk = key.Vk;
-            keyboard.dwFlags = 0;
-        }
+        keyboard.wVk = 0;
+        keyboard.dwFlags = KEYEVENTF_SCANCODE;
         if (up) keyboard.dwFlags |= KEYEVENTF_KEYUP;
         if (key.Extended) keyboard.dwFlags |= KEYEVENTF_EXTENDEDKEY;
         input.ki = keyboard;
@@ -347,6 +342,7 @@ internal sealed class InputInjector {
     }
     private void Send(List<INPUT> inputs, string actionType) {
         if (inputs.Count == 0) return;
+        string failedStrokeType = null;
         foreach (var input in inputs) {
             if (input.type == INPUT_KEYBOARD) {
                 InterceptionDriver.KeyState state;
@@ -355,12 +351,12 @@ internal sealed class InputInjector {
                 } else {
                     state = (input.ki.dwFlags & KEYEVENTF_EXTENDEDKEY) != 0 ? (InterceptionDriver.KeyState.E0 | InterceptionDriver.KeyState.Down) : InterceptionDriver.KeyState.Down;
                 }
-                InterceptionDriver.SendKey(input.ki.wScan, state);
+                if (!TrySendKey(input.ki.wScan, state) && failedStrokeType == null) failedStrokeType = "keyboard";
             } else if (input.type == INPUT_MOUSE) {
                 if ((input.mi.dwFlags & MOUSEEVENTF_MOVE) != 0) {
-                    InterceptionDriver.SendMouseDelta(input.mi.dx, input.mi.dy);
+                    if (!TrySendMouseDelta(input.mi.dx, input.mi.dy) && failedStrokeType == null) failedStrokeType = "mouse move";
                 } else if ((input.mi.dwFlags & MOUSEEVENTF_WHEEL) != 0) {
-                    InterceptionDriver.SendMouseWheel(input.mi.mouseData);
+                    if (!TrySendMouseWheel(input.mi.mouseData) && failedStrokeType == null) failedStrokeType = "mouse wheel";
                 } else {
                     InterceptionDriver.MouseState state = 0;
                     if ((input.mi.dwFlags & MOUSEEVENTF_LEFTDOWN) != 0) state |= InterceptionDriver.MouseState.LeftButtonDown;
@@ -368,11 +364,32 @@ internal sealed class InputInjector {
                     if ((input.mi.dwFlags & MOUSEEVENTF_RIGHTDOWN) != 0) state |= InterceptionDriver.MouseState.RightButtonDown;
                     if ((input.mi.dwFlags & MOUSEEVENTF_RIGHTUP) != 0) state |= InterceptionDriver.MouseState.RightButtonUp;
                     if (state != 0) {
-                        InterceptionDriver.SendMouse(state);
+                        if (!TrySendMouse(state) && failedStrokeType == null) failedStrokeType = "mouse button";
                     }
                 }
             }
         }
+        if (failedStrokeType != null) ThrowSendFailure(actionType, failedStrokeType);
+    }
+
+    private static bool TrySendKey(ushort code, InterceptionDriver.KeyState state) {
+        return InterceptionDriver.SendKey(code, state) || InterceptionDriver.SendKey(code, state);
+    }
+
+    private static bool TrySendMouse(InterceptionDriver.MouseState state) {
+        return InterceptionDriver.SendMouse(state) || InterceptionDriver.SendMouse(state);
+    }
+
+    private static bool TrySendMouseDelta(int dx, int dy) {
+        return InterceptionDriver.SendMouseDelta(dx, dy) || InterceptionDriver.SendMouseDelta(dx, dy);
+    }
+
+    private static bool TrySendMouseWheel(int delta) {
+        return InterceptionDriver.SendMouseWheel(delta) || InterceptionDriver.SendMouseWheel(delta);
+    }
+
+    private void ThrowSendFailure(string actionType, string strokeType) {
+        throw new InvalidOperationException("Interception 发送失败（" + strokeType + "，来源 " + CurrentSource + "，动作 " + actionType + "，原因 " + CurrentReason + "）。");
     }
 
     private const uint INPUT_MOUSE = 0;

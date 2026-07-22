@@ -8,7 +8,7 @@ ShikiPad 是面向有线 PS5 DualSense 的 Windows 原生手柄键鼠映射工�
 - 键层字符表位于 `src/MappingEngine.cs`。
 - 触控板手势识别、区域归属、连发、按压互斥和快捷键输出位于 `src/MapperForm.cs`。
 - 鼠标和滚轮积分分别位于 `src/RightStickMouseIntegrator.cs`、`src/LeftStickScrollIntegrator.cs`。
-- `Enabled = true` 是启动时默认启用状态；`UseScanCode = true` 表示 Interception 按扫描码输出。
+- `Enabled = true` 是启动时默认启用状态；Interception 输出固定使用扫描码，不再提供无效的虚拟键码开关。
 
 ## 支持范围
 
@@ -24,10 +24,11 @@ ShikiPad 必须通过 Interception 输出键盘和鼠标，不会回退到 `Send
 ## 驱动与安装顺序
 
 1. 用 USB 连接 DualSense，并确认 Windows 能识别。
-2. 以管理员身份运行 `install_driver.bat` 安装 Interception，然后重启 Windows。
-3. 以管理员身份运行 `ShikiPad.exe`，确认能输出键盘和鼠标。
-4. 用 HidHide 隐藏 DualSense，避免系统或游戏产生双重输入。
-5. 修改 HidHide 后重新插拔手柄。
+2. 安装 x64 版 `.NET 8 Desktop Runtime`；当前单文件程序是依赖框架发布，不是自包含运行时。
+3. 以管理员身份运行 `install_driver.bat` 安装 Interception；脚本只有在安装器返回成功后才提示重启 Windows。
+4. 重启后以管理员身份运行 `ShikiPad.exe`，确认能输出键盘和鼠标。
+5. 用 HidHide 隐藏 DualSense，避免系统或游戏产生双重输入。
+6. 修改 HidHide 后重新插拔手柄。
 
 HidHide 建议配置：
 
@@ -51,8 +52,12 @@ HidHide 建议配置：
 | `interception.dll` | Interception 运行库 |
 | `README.md` | 中文说明文档 |
 | `RELEASE_NOTES.md` | 版本记录 |
+| `THIRD_PARTY_NOTICES.md` | Interception 来源与第三方许可说明 |
+| `SHA256SUMS.txt` | 发布包内文件的 SHA-256 校验值 |
+| `BUILD_INFO.txt` | 发布版本、源码提交与工作树状态 |
 | `shiki.ico` / `ShikiPad.manifest` | 图标和程序清单 |
-| `shikipad.default` | 默认标记文件 |
+
+正式打包使用 `powershell -NoProfile -ExecutionPolicy Bypass -File .\publish_release.ps1`。脚本会要求 Git 工作树干净、记录源码提交、重新发布当前工作树、校验 V5.2 文件版本、重建文件清单和 ZIP，并默认拒绝没有有效 Authenticode 签名的主程序；只有制作内部测试包时才应在命令末尾显式传入 `-AllowDirty -AllowUnsigned`。`shikipad.default` 已删除，不属于程序输入，也不会进入新发布包。
 
 ## 开机自启动
 
@@ -121,7 +126,7 @@ Base 只表示在没有按住任何 L1/R1 肩键或 L2/R2 扳机键时，方向�
 
 优先级只处理同一轮询帧中新产生的按下、点按、连发、滚轮和指针移动，不会让一个模块长期独占。高优先级模块已经输出时，低优先级的鼠标按键或动作键待处理状态会保留到下一帧，连发计时也不会因被挡住而结算；滚轮和指针移动则只跳过发生冲突的该帧。一个模块内部的组合键、完整修饰脉冲以及同帧多个动作位置仍作为同一所有者连续发送。
 
-所有 KeyUp、鼠标键释放、触控板手势持有修饰键的释放以及异常清理永远不受优先级阻塞。Create/Options 与左摇杆修饰键的方向、按下时间和 45 ms 绑定状态仍在本帧最先登记，但真实 `KeyDown` 进入第 3 级输出通道：若同帧已有触控板按压或手势输出，就延后到下一帧；若取得通道，则 L3/R3 和动作键延后，使修饰键一定先于可绑定动作真实按下。Home 蓄力、静音键和肩键/扳机键层选择只更新控制状态，不占用输出通道。如果快捷键点按的目标键正被另一个模块保持，程序会先暂时释放该目标键，完整发送快捷键后再恢复原保持状态，避免一个模块的 KeyUp 抢走另一个模块的按键所有权。触控板手势快捷键还会在原子点按期间暂时释放该快捷键不需要的外部修饰键，完成后恢复，防止例如已保持 Shift 时把 `Win + M` 污染成 `Win + Shift + M`；动作键自己的 45 ms 修饰绑定仍使用保留外部修饰键的普通点按路径。
+所有 KeyUp、鼠标键释放、触控板手势持有修饰键的释放以及异常清理永远不受优先级阻塞。Create/Options 与左摇杆修饰键的方向、按下时间和 45 ms 绑定状态仍在本帧最先登记，但真实 `KeyDown` 进入第 3 级输出通道：若同帧已有触控板按压或手势输出，就延后到下一帧；若修饰键在取得通道前已经松开，程序会保留完整的延后点按，不会吞掉这次快速输入；若取得通道，则 L3/R3 和动作键延后，使修饰键一定先于可绑定动作真实按下。Home 蓄力、静音键和肩键/扳机键层选择只更新控制状态，不占用输出通道。如果快捷键点按的目标键正被另一个模块保持，程序会先暂时释放该目标键，完整发送快捷键后再恢复原保持状态，避免一个模块的 KeyUp 抢走另一个模块的按键所有权。触控板手势快捷键还会在原子点按期间暂时释放该快捷键不需要的外部修饰键，完成后恢复，防止例如已保持 Shift 时把 `Win + M` 污染成 `Win + Shift + M`；动作键自己的 45 ms 修饰绑定仍使用保留外部修饰键的普通点按路径。
 
 ### 右摇杆鼠标参数
 
@@ -130,7 +135,7 @@ Base 只表示在没有按住任何 L1/R1 肩键或 L2/R2 扳机键时，方向�
 | `MouseSensitivity` | 1.0 | 整体灵敏度 |
 | `MouseMaxSpeed` | 20.0 | 推满时的基础最高速度系数 |
 | `RightStickDeadzone` | 0.015 | 鼠标移动死区 |
-| `RightStickCurve` | `power` | 曲线类型 |
+| `RightStickCurve` | `power` | 曲线类型；支持 `power` 和 `linear` |
 | `RightStickCurveExponent` | 3.0 | 半径幂曲线指数 |
 | `RightStickSmoothingMs` | 5 ms | X/Y 输入的短指数平滑 |
 | 鼠标帧倍率 | 120.0 | 速度公式内部倍率 |
@@ -357,13 +362,17 @@ Base 方向键以及独立触控板模块的 `Delete` / `Backspace` 复用同一
 | `LayerTakeoverWindowMs` | 30 ms | 截点落在旧键层本体后允许继续追溯的累计上限 |
 | `ModifierBindingWindowMs` | 45 ms | 八个动作位置与 L3/R3 的独立修饰绑定窗口；边界计入，不影响键层归属 |
 
-`ActionLayerGraceMs` 是键层向前观察范围；累计本体达到 20 ms 后，只能继续停留在当前边界键层本体内追到 30 ms，不能再跨入更早键层或其前置窗口。`ModifierBindingWindowMs` 与这条时间线相互独立。键层参数直接影响快速输入时的归属和延迟，修改时建议一次只调整一个值并进行连续快速输入测试。
+`ActionLayerGraceMs` 是键层向前观察范围；累计本体达到 20 ms 后，只能继续停留在当前边界键层本体内追到 30 ms，不能再跨入更早键层或其前置窗口。`ModifierBindingWindowMs` 与这条时间线相互独立：动作会等待两者中较长的窗口结束再输出，但超过 `ActionLayerGraceMs` 才按下的肩键/扳机键仍不能取得键层。键层参数直接影响快速输入时的归属和延迟，修改时建议一次只调整一个值并进行连续快速输入测试。所有参数会在启动时验证，非法死区、间隔或曲线类型会直接给出启动错误，不再带着无效值运行。
 
 ## 故障排查
 
 ### 没有键鼠输出
 
-确认已安装 Interception、重启过 Windows，并以管理员身份运行 `ShikiPad.exe`。当前版本不会在 Interception 不可用时回退到其他输出方式。
+确认已安装 x64 `.NET 8 Desktop Runtime` 和 Interception、重启过 Windows，并以管理员身份运行 `ShikiPad.exe`。当前版本不会在 Interception 不可用时回退到其他输出方式。Interception 单次发送失败时会原样重试一次；连续失败会停止本轮映射、保留内部保持记录并打印错误，避免静默结算成错误状态。
+
+### 提示已有实例正在运行
+
+正常映射进程在当前 Windows 会话中只允许一个实例。若计划任务已经启动 ShikiPad，请不要再手动启动第二份；需要重启时先关闭原控制台窗口。
 
 ### 系统或游戏双重输入
 

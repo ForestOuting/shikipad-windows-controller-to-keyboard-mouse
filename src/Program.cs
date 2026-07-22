@@ -25,6 +25,7 @@ internal static class Program {
 
     private static ConsoleCtrlHandler _consoleCtrlHandler;
     private const string StartupTaskName = "ShikiPad";
+    private const string RunMutexName = @"Local\ForestOuting.ShikiPad";
     public static void PrintGradientBanner() {
         EnableAnsi();
         PrintStartupSpinner();
@@ -562,6 +563,7 @@ internal static class Program {
     }
 
     private static bool _shutdownReleaseRegistered;
+    private static int _shutdownReleaseStarted;
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -599,35 +601,47 @@ internal static class Program {
             Console.WriteLine("Command line: " + Environment.CommandLine);
             Console.WriteLine("Process ID: " + Process.GetCurrentProcess().Id);
 
-            int parentId = 0;
-            try {
-                var pc = new System.Diagnostics.PerformanceCounter("Process", "Creating Process ID", Process.GetCurrentProcess().ProcessName);
-                parentId = (int)pc.NextValue();
-            } catch { }
-            Console.WriteLine("Parent process ID: " + parentId);
-
-            Console.WriteLine("Does this exact process register RawInput? YES");
+            Console.WriteLine("Does this exact process read DualSense through Direct HID? YES");
             Console.WriteLine("Is any helper process used? NO");
             Console.WriteLine("\nAdd THIS EXACT path to HidHide Applications:");
             Console.WriteLine(Process.GetCurrentProcess().MainModule.FileName);
             return 0;
         }
 
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
-
-        PrintStartupSpinner();
-
-        PrintRunHint();
-        MapperForm form;
+        Mutex runMutex;
+        bool ownsRunMutex;
         try {
-            form = new MapperForm(config);
+            runMutex = new Mutex(true, RunMutexName, out ownsRunMutex);
         } catch (Exception ex) {
-            PrintFatalStartupError(ex.Message);
+            PrintFatalStartupError("无法创建单实例锁：" + ex.Message);
             return 1;
         }
-        Application.Run(form);
-        return 0;
+        if (!ownsRunMutex) {
+            runMutex.Dispose();
+            PrintFatalStartupError("ShikiPad 已经在当前 Windows 会话中运行。请先关闭已有实例。");
+            return 2;
+        }
+
+        try {
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+
+            PrintStartupSpinner();
+
+            PrintRunHint();
+            MapperForm form;
+            try {
+                form = new MapperForm(config);
+            } catch (Exception ex) {
+                PrintFatalStartupError(ex.Message);
+                return 1;
+            }
+            Application.Run(form);
+            return 0;
+        } finally {
+            try { runMutex.ReleaseMutex(); } catch { }
+            runMutex.Dispose();
+        }
     }
 
     private static void RegisterShutdownRelease() {
@@ -640,7 +654,11 @@ internal static class Program {
             ReleaseAllRuntimeInput();
         };
         Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e) {
-            ReleaseAllRuntimeInput();
+            try {
+                Application.Exit();
+            } catch {
+                ReleaseAllRuntimeInput();
+            }
         };
         AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs e) {
             ReleaseAllRuntimeInput();
@@ -657,6 +675,7 @@ internal static class Program {
     }
 
     private static void ReleaseAllRuntimeInput() {
+        if (Interlocked.Exchange(ref _shutdownReleaseStarted, 1) != 0) return;
         InputInjector.ReleaseAllRegistered();
         InterceptionDriver.Cleanup();
     }

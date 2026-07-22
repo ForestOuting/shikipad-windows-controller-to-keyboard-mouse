@@ -19,6 +19,7 @@ internal sealed class DirectHidController {
     private volatile bool _running;
     private IntPtr _handle = IntPtr.Zero;
     private string _deviceName = "DualSense";
+    private long _lastHidErrorLogMs = -10000;
 
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool ReadFile(IntPtr hFile, byte[] lpBuffer, uint nNumberOfBytesToRead, out uint lpNumberOfBytesRead, IntPtr lpOverlapped);
@@ -70,9 +71,9 @@ internal sealed class DirectHidController {
                     byte[] report = new byte[bytesRead];
                     Buffer.BlockCopy(buffer, 0, report, 0, (int)bytesRead);
                     try {
-                        ParseReport(report);
-                        StateUpdated?.Invoke(State);
-                    } catch {
+                        if (ParseReport(report)) StateUpdated?.Invoke(State);
+                    } catch (Exception ex) {
+                        LogHidError("HID 报告处理失败：" + ex.GetType().Name + "：" + ex.Message);
                     }
                 }
             } else {
@@ -169,10 +170,21 @@ internal sealed class DirectHidController {
         return name + " (PID 0x" + productId.ToString("X4", CultureInfo.InvariantCulture) + ")";
     }
 
-    private void ParseReport(byte[] r) {
+    private bool ParseReport(byte[] r) {
         ControllerState s;
-        if (!TryParseDualSenseReport(r, out s)) return;
+        if (!TryParseDualSenseReport(r, out s)) {
+            LogHidError("忽略了无法解析的 DualSense HID 报告（长度 " + (r == null ? 0 : r.Length) + "）。");
+            return false;
+        }
         State = s;
+        return true;
+    }
+
+    private void LogHidError(string message) {
+        long now = Environment.TickCount64;
+        if (now - Interlocked.Read(ref _lastHidErrorLogMs) < 1000) return;
+        Interlocked.Exchange(ref _lastHidErrorLogMs, now);
+        try { Console.Error.WriteLine("[warn] " + message); } catch { }
     }
 
     internal static bool TryParseDualSenseReport(byte[] r, out ControllerState s) {

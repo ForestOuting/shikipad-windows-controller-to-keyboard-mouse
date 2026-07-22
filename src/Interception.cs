@@ -53,57 +53,72 @@ internal static class InterceptionDriver {
     public const int KEYBOARD_DEVICE = 1;
     public const int MOUSE_DEVICE = 11;
 
+    private static readonly object s_contextLock = new object();
     private static IntPtr _context = IntPtr.Zero;
 
     public static bool Initialize() {
-        if (_context == IntPtr.Zero) {
-            try {
-                _context = interception_create_context();
-            } catch (Exception) {
-                return false;
+        lock (s_contextLock) {
+            if (_context == IntPtr.Zero) {
+                try {
+                    _context = interception_create_context();
+                } catch (Exception) {
+                    return false;
+                }
             }
+            return _context != IntPtr.Zero;
         }
-        return _context != IntPtr.Zero;
     }
 
     public static void Cleanup() {
-        if (_context != IntPtr.Zero) {
-            try {
-                interception_destroy_context(_context);
-            } catch { }
-            _context = IntPtr.Zero;
+        lock (s_contextLock) {
+            if (_context != IntPtr.Zero) {
+                try {
+                    interception_destroy_context(_context);
+                } catch {
+                } finally {
+                    _context = IntPtr.Zero;
+                }
+            }
         }
     }
 
-    public static void SendKey(ushort code, KeyState state) {
-        if (_context == IntPtr.Zero) return;
-        InterceptionStroke stroke = new InterceptionStroke();
-        stroke.keyboard.code = code;
-        stroke.keyboard.state = (ushort)state;
-        interception_send(_context, KEYBOARD_DEVICE, ref stroke, 1);
+    public static bool SendKey(ushort code, KeyState state) {
+        lock (s_contextLock) {
+            if (_context == IntPtr.Zero) return false;
+            InterceptionStroke stroke = new InterceptionStroke();
+            stroke.keyboard.code = code;
+            stroke.keyboard.state = (ushort)state;
+            return interception_send(_context, KEYBOARD_DEVICE, ref stroke, 1) == 1;
+        }
     }
 
-    public static void SendMouse(MouseState state) {
-        if (_context == IntPtr.Zero) return;
-        InterceptionStroke stroke = new InterceptionStroke();
-        stroke.mouse.state = (ushort)state;
-        interception_send(_context, MOUSE_DEVICE, ref stroke, 1);
+    public static bool SendMouse(MouseState state) {
+        lock (s_contextLock) {
+            if (_context == IntPtr.Zero) return false;
+            InterceptionStroke stroke = new InterceptionStroke();
+            stroke.mouse.state = (ushort)state;
+            return interception_send(_context, MOUSE_DEVICE, ref stroke, 1) == 1;
+        }
     }
 
-    public static void SendMouseDelta(int dx, int dy) {
-        if (_context == IntPtr.Zero) return;
-        InterceptionStroke stroke = new InterceptionStroke();
-        stroke.mouse.x = dx;
-        stroke.mouse.y = dy;
-        stroke.mouse.flags = 0;
-        interception_send(_context, MOUSE_DEVICE, ref stroke, 1);
+    public static bool SendMouseDelta(int dx, int dy) {
+        lock (s_contextLock) {
+            if (_context == IntPtr.Zero) return false;
+            InterceptionStroke stroke = new InterceptionStroke();
+            stroke.mouse.x = dx;
+            stroke.mouse.y = dy;
+            stroke.mouse.flags = 0;
+            return interception_send(_context, MOUSE_DEVICE, ref stroke, 1) == 1;
+        }
     }
 
-    public static void SendMouseWheel(int rolling) {
-        if (_context == IntPtr.Zero) return;
-        InterceptionStroke stroke = new InterceptionStroke();
-        stroke.mouse.state = (ushort)MouseState.Wheel;
-        stroke.mouse.rolling = (short)rolling;
-        interception_send(_context, MOUSE_DEVICE, ref stroke, 1);
+    public static bool SendMouseWheel(int rolling) {
+        lock (s_contextLock) {
+            if (_context == IntPtr.Zero) return false;
+            InterceptionStroke stroke = new InterceptionStroke();
+            stroke.mouse.state = (ushort)MouseState.Wheel;
+            stroke.mouse.rolling = (short)rolling;
+            return interception_send(_context, MOUSE_DEVICE, ref stroke, 1) == 1;
+        }
     }
 }

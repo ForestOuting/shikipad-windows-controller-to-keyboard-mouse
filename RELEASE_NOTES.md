@@ -2,6 +2,11 @@
 
 ## V5.2 - 2026-07-22
 
+- Preserved a complete deferred modifier tap when a left-stick or Create/Options modifier is released before its arbitrated KeyDown can run, preventing fast taps from disappearing behind a touchpad output.
+- Made the modifier-binding wait genuinely independent from the pure layer grace window while retaining the original layer takeover boundaries.
+- Enforced the documented module order at runtime, added native Interception send-result checks with one retry, serialized context cleanup, and kept injector bookkeeping unchanged after failed sends.
+- Added a per-session single-instance lock, HID parse diagnostics, validated editable parameters, implemented the documented linear right-stick curve, and corrected all assembly metadata to V5.2.
+- Added reproducible release packaging, SHA-256 manifests, third-party notices, .NET 8 Desktop Runtime documentation, and driver-installer exit-code handling; removed the unused Bluetooth marker from the package definition.
 - Added a per-poll output arbiter so simultaneous modules cannot interleave independent output sequences. Priority is touchpad click, touch gesture, modifier transitions, L3/R3, eight action positions, left-stick wheel, then right-stick pointer movement.
 - Fixed left-stick and Create/Options modifier presses bypassing arbitration: their logical state and 45 ms binding are registered immediately, while physical KeyDown output is serialized after touchpad outputs and before bindable mouse/action output.
 - Release events never enter the arbiter: KeyUp/mouse-up/gesture-modifier cleanup always runs. Logical modifier registration plus Home, Mute, and shoulder/trigger state also update before arbitration; only physical modifier KeyDown is serialized.
