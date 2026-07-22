@@ -97,7 +97,26 @@ $hashLines | Set-Content -LiteralPath (Join-Path $packageDir 'SHA256SUMS.txt') -
 if (Test-Path -LiteralPath $temporaryZip) {
     Remove-Item -LiteralPath $temporaryZip -Force
 }
-Compress-Archive -Path (Join-Path $packageDir '*') -DestinationPath $temporaryZip -CompressionLevel Optimal
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archive = [System.IO.Compression.ZipFile]::Open(
+    $temporaryZip,
+    [System.IO.Compression.ZipArchiveMode]::Create
+)
+try {
+    Get-ChildItem -LiteralPath $packageDir -File -Recurse |
+        Sort-Object FullName |
+        ForEach-Object {
+            $relative = $_.FullName.Substring($packageDir.Length + 1).Replace('\', '/')
+            [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $archive,
+                $_.FullName,
+                $relative,
+                [System.IO.Compression.CompressionLevel]::Optimal
+            ) | Out-Null
+        }
+} finally {
+    $archive.Dispose()
+}
 
 Copy-Item -LiteralPath $publishedExe -Destination $rootExe -Force
 Copy-Item -LiteralPath (Join-Path $packageDir 'SHA256SUMS.txt') -Destination $hashFile -Force
