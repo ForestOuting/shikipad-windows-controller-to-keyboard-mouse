@@ -97,6 +97,7 @@ $hashLines | Set-Content -LiteralPath (Join-Path $packageDir 'SHA256SUMS.txt') -
 if (Test-Path -LiteralPath $temporaryZip) {
     Remove-Item -LiteralPath $temporaryZip -Force
 }
+Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive = [System.IO.Compression.ZipFile]::Open(
     $temporaryZip,
