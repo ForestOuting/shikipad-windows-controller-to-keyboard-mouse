@@ -21,16 +21,32 @@ ShikiPad 是面向有线 PS5 DualSense 的 Windows 原生手柄键鼠映射工�
 
 ShikiPad 必须通过 Interception 输出键盘和鼠标，不会回退到 `SendInput`。
 
-## 驱动与安装顺序
+## 首次安装与启动
 
-1. 用 USB 连接 DualSense，并确认 Windows 能识别。
+首次使用请严格按以下顺序操作，并在确认基础映射正常后再配置 HidHide：
+
+1. 将发布包完整解压到固定目录，例如 `C:\ShikiPad`。不要直接在 ZIP 压缩包中运行程序；确保 `ShikiPad.exe`、`interception.dll`、`install_driver.bat` 和 `driver` 文件夹保持在解压后的原有相对位置。
 2. 安装 x64 版 `.NET 8 Desktop Runtime`；当前单文件程序是依赖框架发布，不是自包含运行时。
-3. 以管理员身份运行 `install_driver.bat` 安装 Interception；脚本只有在安装器返回成功后才提示重启 Windows。
-4. 重启后以管理员身份运行 `ShikiPad.exe`，确认能输出键盘和鼠标。
-5. 用 HidHide 隐藏 DualSense，避免系统或游戏产生双重输入。
-6. 修改 HidHide 后重新插拔手柄。
+3. 使用可传输数据的 USB 线连接官方 DualSense，并在 Windows 中确认手柄已经被识别。启动 ShikiPad 前保持手柄连接；不要使用蓝牙模式。
+4. 在解压目录中右键 `install_driver.bat`，选择“以管理员身份运行”。等待脚本明确显示安装完成和必须重启的提示后再关闭窗口。
+5. 从 Windows 电源菜单选择“重启”。请执行真正的重新启动，不要用“关机后再开机”代替；重启完成前不要启动 ShikiPad。
+6. 重启后重新确认 DualSense 仍通过 USB 连接，然后使用以下任一方式启动 ShikiPad：
+   - 在文件资源管理器中右键 `C:\ShikiPad\ShikiPad.exe`，选择“以管理员身份运行”。
+   - 打开管理员 PowerShell，执行：
 
-HidHide 建议配置：
+     ```powershell
+     Set-Location C:\ShikiPad
+     .\ShikiPad.exe
+     ```
+
+7. 确认 UAC 中显示的程序路径是 `C:\ShikiPad\ShikiPad.exe`，然后允许启动。保持 ShikiPad 控制台窗口打开；关闭窗口会退出映射程序。
+8. 先验证基础映射：右摇杆移动鼠标，L3/R3 触发鼠标左键/右键，左摇杆正上或正下控制滚轮。三项均正常后，首次安装即完成。
+
+以后使用时，只需先用 USB 连接 DualSense，再以管理员身份运行同一路径下的 `ShikiPad.exe`；不需要重复安装 Interception。ShikiPad 在同一 Windows 会话中只运行一个实例。
+
+### HidHide 建议配置
+
+基础映射验证成功后，再用 HidHide 隐藏 DualSense，避免系统或游戏产生双重输入：
 
 1. 在 `Applications` 中加入 `ShikiPad.exe` 的准确路径。
 2. 取消 `Inverse application cloak`。
