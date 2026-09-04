@@ -7,6 +7,7 @@ internal sealed class Config {
     public double RightStickDeadzone = 0.015;
     public string RightStickCurve = "power";
     public double RightStickCurveExponent = 3.0;
+    public double RightStickLowSpeedAssist = 0.05;
     public double RightStickSmoothingMs = 5.0;
     public double MouseScrollCurveExponent = 3.0;
     public double MouseScrollSmoothingMs = 5.0;
@@ -26,6 +27,7 @@ internal sealed class Config {
     public int ComboLayerWindowMs = 35;
     public int ScrollSlowIntervalMs = 1500;
     public int ScrollFastIntervalMs = 15;
+    public int ScrollReportIntervalMs = 4;
     public double TouchGestureHoldStillDistance = 100.0;
     public double TouchGestureVerticalThreshold = 150.0;
     public double TouchGestureHorizontalThreshold = 180.0;
@@ -47,6 +49,7 @@ internal sealed class Config {
             throw new InvalidOperationException(nameof(RightStickCurve) + " 只支持 power 或 linear。");
         }
         RequireFinitePositive(RightStickCurveExponent, nameof(RightStickCurveExponent));
+        RequireUnitIntervalInclusive(RightStickLowSpeedAssist, nameof(RightStickLowSpeedAssist));
         RequireFiniteNonNegative(RightStickSmoothingMs, nameof(RightStickSmoothingMs));
         RequireFinitePositive(MouseScrollCurveExponent, nameof(MouseScrollCurveExponent));
         RequireFiniteNonNegative(MouseScrollSmoothingMs, nameof(MouseScrollSmoothingMs));
@@ -76,6 +79,7 @@ internal sealed class Config {
         }
         RequirePositive(ScrollSlowIntervalMs, nameof(ScrollSlowIntervalMs));
         RequirePositive(ScrollFastIntervalMs, nameof(ScrollFastIntervalMs));
+        RequirePositive(ScrollReportIntervalMs, nameof(ScrollReportIntervalMs));
         if (ScrollFastIntervalMs > ScrollSlowIntervalMs) {
             throw new InvalidOperationException(nameof(ScrollFastIntervalMs) + " 不能大于 " + nameof(ScrollSlowIntervalMs) + "。");
         }

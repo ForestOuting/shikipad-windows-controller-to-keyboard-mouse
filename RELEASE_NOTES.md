@@ -2,15 +2,22 @@
 
 ## V5.2 - 2026-07-22
 
-- Preserved a complete deferred modifier tap when a left-stick or Create/Options modifier is released before its arbitrated KeyDown can run, preventing fast taps from disappearing behind a touchpad output.
+- Replaced the global one-module-per-poll output owner with deterministic non-exclusive processing: every eligible module now runs in order during the same poll, so keyboard actions, mouse buttons, wheel output, and pointer movement no longer suppress one another.
+- Removed the competing HID-callback mapper entry and the now-unnecessary tick lock: the HID thread only publishes the latest immutable state, while one fixed 1 ms scheduler exclusively performs mapping and output.
+- Restored fine high-resolution wheel deltas from the first available 0.5 accumulated unit while pacing subsequent reports to at most one every 4 ms; maximum stick speed still accumulates 120 units per 15 ms without returning to one wheel report every 1 ms.
+- Restored immediate, confirmed delivery for each atomic keyboard and mouse action after testing found that deferred frame batching could desynchronize program-side hold bookkeeping from the strokes actually accepted by the driver.
+- Kept left-stick wheel and right-stick pointer integration independent and sends their wheel and movement reports separately in the same scheduler cycle, without relying on an unverified combined stroke.
+- Added a center-weighted 0.05 low-speed assist to the cubic right-stick curve: subtle movement reaches its first one-pixel output much sooner, while the correction fades toward the outer range and leaves full-stick speed unchanged.
+- Preserved the actual conflict boundaries instead of broad frame blocking: touchpad click/gesture ownership, atomic shortcut and modifier pulses, modifier reference counting, unconditional releases, and the explicit R3 pointer freeze remain intact.
+- Preserved a complete modifier tap when a left-stick or Create/Options modifier is released between logical registration and its physical-output stage, preventing very short taps from disappearing.
 - Made the modifier-binding wait genuinely independent from the pure layer grace window while retaining the original layer takeover boundaries.
-- Enforced the documented module order at runtime, added native Interception send-result checks with one retry, serialized context cleanup, and kept injector bookkeeping unchanged after failed sends.
+- Kept the documented module call order without a runtime priority/stage gate, added native Interception send-result checks with one retry, serialized context cleanup, and kept injector bookkeeping unchanged after failed sends.
 - Added a per-session single-instance lock, HID parse diagnostics, validated editable parameters, implemented the documented linear right-stick curve, and corrected all assembly metadata to V5.2.
 - Added reproducible release packaging, SHA-256 manifests, third-party notices, .NET 8 Desktop Runtime documentation, and driver-installer exit-code handling; removed the unused Bluetooth marker from the package definition.
-- Added a per-poll output arbiter so simultaneous modules cannot interleave independent output sequences. Priority is touchpad click, touch gesture, modifier transitions, L3/R3, eight action positions, left-stick wheel, then right-stick pointer movement.
-- Fixed left-stick and Create/Options modifier presses bypassing arbitration: their logical state and 45 ms binding are registered immediately, while physical KeyDown output is serialized after touchpad outputs and before bindable mouse/action output.
-- Release events never enter the arbiter: KeyUp/mouse-up/gesture-modifier cleanup always runs. Logical modifier registration plus Home, Mute, and shoulder/trigger state also update before arbitration; only physical modifier KeyDown is serialized.
-- Deferred mouse-button and action outputs keep their pending state for the next poll, and blocked repeats keep their due time instead of being silently settled.
+- Left-stick and Create/Options modifier states and 45 ms bindings are registered immediately, while physical KeyDown output follows touchpad output and precedes bindable mouse/action output in the same poll.
+- KeyUp, mouse-up, gesture-modifier cleanup, Home/Mute state, and shoulder/trigger layer state remain independent and cannot be suppressed by another module's output.
+- Mouse-button and action pending states continue to implement their intentional 45 ms decision windows; once due, they are no longer postponed merely because another module emitted in the same poll.
+- Swapped the one-finger vertical gesture assignments between touchpad regions: left up/down now cycles windows, while right up/down maximizes or restores the current window.
 - `KeyTap` now temporarily releases and restores an already-held ordinary target key, preventing an atomic shortcut from stealing another module's held-key ownership.
 - Touch-gesture shortcuts now use exact modifier isolation: unrelated held modifiers are suspended for the atomic shortcut and restored afterward, while action-layer taps retain their intentional 45 ms bound modifiers.
 

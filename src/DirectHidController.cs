@@ -13,7 +13,6 @@ internal sealed class DirectHidController {
     private const int TouchpadEdgeTolerance = 128;
 
     public volatile ControllerState State = new ControllerState();
-    public event Action<ControllerState> StateUpdated;
 
     private Thread _thread;
     private volatile bool _running;
@@ -71,7 +70,7 @@ internal sealed class DirectHidController {
                     byte[] report = new byte[bytesRead];
                     Buffer.BlockCopy(buffer, 0, report, 0, (int)bytesRead);
                     try {
-                        if (ParseReport(report)) StateUpdated?.Invoke(State);
+                        ParseReport(report);
                     } catch (Exception ex) {
                         LogHidError("HID 报告处理失败：" + ex.GetType().Name + "：" + ex.Message);
                     }

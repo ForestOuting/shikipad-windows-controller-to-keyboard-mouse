@@ -19,7 +19,8 @@ static class Program {
         VerifyModifierActionWindow(assembly, mapper);
         VerifyCapsFnTranslation(assembly, mapper);
         VerifyLeftStickSectors(mapper);
-        VerifyOutputModulePriority(assembly, mapper);
+        VerifyIndependentOutputFlow(assembly, mapper);
+        VerifyContinuousOutputsAdvanceTogether(assembly);
         VerifyConfigurationGuards(assembly);
         VerifyPureBaseAndLayerSelection(assembly, mapper);
         NotNull(mapper.GetMethod("UpdateTwoFingerContinuationRepeat", BindingFlags.NonPublic | BindingFlags.Instance), "two-finger continuation update remains available");
@@ -225,48 +226,22 @@ static class Program {
         return sector.Invoke(null, new object[] { Math.Cos(radians), -Math.Sin(radians) }).ToString();
     }
 
-    private static void VerifyOutputModulePriority(Assembly assembly, Type mapper) {
-        Type moduleType = RequiredType(assembly, "MapperForm+OutputModule");
-        MethodInfo priority = RequiredMethod(mapper, "OutputModulePriority");
-        MethodInfo canUseLane = RequiredMethod(mapper, "CanUseTickOutputLane");
-        string[] ordered = { "TouchpadClick", "TouchGesture", "ModifierKeys", "StickClicks", "ActionButtons", "LeftStickScroll", "RightStickPointer" };
-        int previous = int.MaxValue;
-        foreach (string name in ordered) {
-            object module = Enum.Parse(moduleType, name);
-            int current = (int)priority.Invoke(null, new[] { module });
-            Equal(true, current < previous, name + " follows the documented descending output priority");
-            previous = current;
-        }
-
-        object none = Enum.Parse(moduleType, "None");
-        object modifiers = Enum.Parse(moduleType, "ModifierKeys");
-        object actions = Enum.Parse(moduleType, "ActionButtons");
-        object scroll = Enum.Parse(moduleType, "LeftStickScroll");
-        Equal(true, canUseLane.Invoke(null, new[] { none, actions }), "an unclaimed frame accepts an action output owner");
-        Equal(true, canUseLane.Invoke(null, new[] { actions, actions }), "one module can emit an atomic multi-event output in its owned frame");
-        Equal(false, canUseLane.Invoke(null, new[] { actions, scroll }), "a second module is deferred after the frame is claimed");
-        Equal(false, canUseLane.Invoke(null, new[] { modifiers, actions }), "a modifier transition is serialized before action output");
-        Equal(true, canUseLane.Invoke(null, new[] { modifiers, modifiers }), "all modifier transitions can finish atomically in their owned frame");
-
+    private static void VerifyIndependentOutputFlow(Assembly assembly, Type mapper) {
         Equal(true, mapper.GetMethod("FlushPendingModifierKeys", BindingFlags.NonPublic | BindingFlags.Instance) != null, "logical modifier registration is separated from physical modifier output");
-
-        object mapperInstance = RuntimeHelpers.GetUninitializedObject(mapper);
-        mapper.GetField("_tickOutputOwner", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(mapperInstance, none);
-        mapper.GetField("_tickOutputStage", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(mapperInstance, actions);
-        MethodInfo claimLane = mapper.GetMethod("TryClaimTickOutput", BindingFlags.NonPublic | BindingFlags.Instance);
-        Equal(true, claimLane.Invoke(mapperInstance, new[] { actions }), "the first output module claims the polling frame");
-        mapper.GetField("_tickOutputStage", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(mapperInstance, scroll);
-        Equal(false, claimLane.Invoke(mapperInstance, new[] { scroll }), "a different lower-priority module is deferred in the claimed frame");
-        mapper.GetField("_tickOutputStage", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(mapperInstance, actions);
-        Equal(true, claimLane.Invoke(mapperInstance, new[] { actions }), "the owning module can finish its atomic sequence");
-
-        object stagedMapper = RuntimeHelpers.GetUninitializedObject(mapper);
-        mapper.GetField("_lastOutputStagePriority", BindingFlags.NonPublic | BindingFlags.Instance).SetValue(stagedMapper, int.MaxValue);
-        MethodInfo beginStage = mapper.GetMethod("BeginOutputStage", BindingFlags.NonPublic | BindingFlags.Instance);
-        foreach (string name in ordered) beginStage.Invoke(stagedMapper, new[] { Enum.Parse(moduleType, name) });
-        ExpectInvocationFailure(() => beginStage.Invoke(stagedMapper, new[] { actions }), "priority stages reject an out-of-order module");
+        Equal(null, mapper.GetField("_tickOutputOwner", BindingFlags.NonPublic | BindingFlags.Instance), "no module can exclusively own and suppress an entire polling frame");
+        Equal(null, mapper.GetMethod("CanUseTickOutputLane", BindingFlags.NonPublic | BindingFlags.Static), "the obsolete global output-lane gate is removed");
+        Equal(null, mapper.GetNestedType("OutputModule", BindingFlags.NonPublic), "no residual global priority or stage type can gate module output");
+        Equal(null, mapper.GetMethod("RequireOutputStage", BindingFlags.NonPublic | BindingFlags.Instance), "no runtime stage guard can turn harmless overlap into a mapper exception");
+        Equal(null, mapper.GetField("_tickLock", BindingFlags.NonPublic | BindingFlags.Instance), "the single fixed scheduler no longer contends on a mapper tick lock");
+        Equal(null, mapper.GetMethod("OnStateUpdated", BindingFlags.NonPublic | BindingFlags.Instance), "HID report callbacks no longer execute a second mapper tick");
+        Equal(null, RequiredType(assembly, "DirectHidController").GetEvent("StateUpdated"), "the HID reader only publishes the latest state reference");
 
         Type injector = RequiredType(assembly, "InputInjector");
+        Equal(null, injector.GetMethod("BeginFrame"), "input injection has no deferred logical-frame queue");
+        Equal(null, injector.GetMethod("FlushFrame"), "input injection cannot postpone native delivery until frame end");
+        Equal(null, injector.GetMethod("AbortFrame"), "failure recovery cannot blindly release a partially sent frame");
+        Equal(null, injector.GetMethod("MouseMoveAndWheel"), "pointer and wheel use independent verified driver reports");
+        Equal(null, injector.GetField("_frameStrokes", BindingFlags.NonPublic | BindingFlags.Instance), "held-state bookkeeping cannot diverge from a deferred native queue");
         MethodInfo restoreTap = RequiredMethod(injector, "ShouldRestoreHeldKeyForTap");
         Type keyType = RequiredType(assembly, "PhysicalKey");
         Equal(true, restoreTap.Invoke(null, new[] { (object)true, Enum.Parse(keyType, "M") }), "a tap restores an already-held ordinary key after its pulse");
@@ -282,6 +257,84 @@ static class Program {
         Type interception = RequiredType(assembly, "InterceptionDriver");
         Equal(typeof(bool), interception.GetMethod("SendKey").ReturnType, "keyboard injection reports native send success");
         Equal(typeof(bool), interception.GetMethod("SendMouse").ReturnType, "mouse injection reports native send success");
+        Equal(typeof(bool), interception.GetMethod("SendMouseDelta").ReturnType, "pointer injection reports native send success");
+        Equal(typeof(bool), interception.GetMethod("SendMouseWheel").ReturnType, "wheel injection reports native send success");
+        Equal(null, interception.GetMethod("SendMouseDeltaAndWheel"), "the driver path does not depend on an unverified combined mouse stroke");
+        Equal(null, interception.GetMethod("SendStrokes"), "the driver path does not expose partial multi-stroke sends");
+    }
+
+    private static void VerifyContinuousOutputsAdvanceTogether(Assembly assembly) {
+        Type configType = RequiredType(assembly, "Config");
+        object config = Activator.CreateInstance(configType);
+
+        Type scrollType = RequiredType(assembly, "LeftStickScrollIntegrator");
+        object scroll = Activator.CreateInstance(scrollType);
+        MethodInfo updateScroll = scrollType.GetMethod("TryUpdate");
+        MethodInfo scrollInterval = RequiredMethod(scrollType, "ScrollIntervalMs");
+        Equal(15.0, scrollInterval.Invoke(null, new object[] { 1.0, config }), "maximum wheel speed keeps the documented 15 ms interval");
+
+        Type pointerType = RequiredType(assembly, "RightStickMouseIntegrator");
+        object pointer = Activator.CreateInstance(pointerType);
+        MethodInfo updatePointer = pointerType.GetMethod("TryUpdate");
+
+        int wheelReports = 0;
+        int wheelDeltaTotal = 0;
+        int pointerReports = 0;
+        int sameCycleOutputTicks = 0;
+        for (int tick = 0; tick < 300; tick++) {
+            object[] scrollArgs = { 1.0, 0.001, config, 1, 0 };
+            object[] pointerArgs = { 1.0, 0.0, 0.001, config, 0, 0 };
+            bool wheelOutput = (bool)updateScroll.Invoke(scroll, scrollArgs);
+            bool pointerOutput = (bool)updatePointer.Invoke(pointer, pointerArgs);
+            if (wheelOutput) {
+                wheelReports++;
+                int delta = (int)scrollArgs[4];
+                Equal(true, delta > 0 && delta <= 120, "wheel emits a bounded positive high-resolution delta");
+                wheelDeltaTotal += delta;
+            }
+            if (pointerOutput) pointerReports++;
+            if (wheelOutput && pointerOutput) sameCycleOutputTicks++;
+        }
+
+        Equal(75, wheelReports, "wheel reporting is capped at one output every 4 ms instead of every 1 ms");
+        Equal(2376, wheelDeltaTotal, "paced wheel output preserves accumulated distance apart from the pending sub-report remainder");
+        Equal(300, pointerReports, "pointer movement remains available on every fixed scheduler tick during sustained simultaneous input");
+        Equal(75, sameCycleOutputTicks, "paced wheel reports and pointer movement remain available in the same scheduler cycle");
+
+        object[] neutralScrollArgs = { 0.0, 0.001, config, 1, 0 };
+        object[] neutralPointerArgs = { 0.0, 0.0, 0.001, config, 0, 0 };
+        Equal(false, updateScroll.Invoke(scroll, neutralScrollArgs), "releasing the left stick clears pending wheel output immediately");
+        Equal(false, updatePointer.Invoke(pointer, neutralPointerArgs), "releasing the right stick clears pending pointer output immediately");
+
+        object[] resumedWheelStep = { 1.0, 0.001, config, 1, 0 };
+        Equal(true, updateScroll.Invoke(scroll, resumedWheelStep), "wheel produces a fine delta on the first tick after release");
+        Equal(8, resumedWheelStep[4], "the first maximum-speed wheel delta is fine-grained rather than a full 120-unit jump");
+
+        object[] reverseStart = { 1.0, 0.001, config, -1, 0 };
+        Equal(true, updateScroll.Invoke(scroll, reverseStart), "reversing wheel direction starts a fresh fine-delta report immediately");
+        Equal(-8, reverseStart[4], "reverse wheel clears the previous accumulator and emits the correct signed delta");
+
+        scroll = Activator.CreateInstance(scrollType);
+        for (int tick = 0; tick < 6; tick++) {
+            object[] lowSpeedPending = { 0.31, 0.001, config, 1, 0 };
+            Equal(false, updateScroll.Invoke(scroll, lowSpeedPending), "low-speed wheel accumulates only until the first fine unit is available");
+        }
+        object[] lowSpeedStep = { 0.31, 0.001, config, 1, 0 };
+        Equal(true, updateScroll.Invoke(scroll, lowSpeedStep), "low-speed wheel begins without waiting for a full notch");
+        Equal(1, lowSpeedStep[4], "low-speed wheel starts with one high-resolution unit");
+
+        double deadzone = (double)configType.GetField("RightStickDeadzone").GetValue(config);
+        double lowRadius = deadzone + (1.0 - deadzone) * 0.05;
+        int firstLowSpeedPointerTick = 0;
+        for (int tick = 1; tick <= 100; tick++) {
+            object[] lowPointerArgs = { lowRadius, 0.0, 0.001, config, 0, 0 };
+            if ((bool)updatePointer.Invoke(pointer, lowPointerArgs)) {
+                firstLowSpeedPointerTick = tick;
+                Equal(1, lowPointerArgs[4], "low-speed pointer starts with one pixel rather than a large jump");
+                break;
+            }
+        }
+        Equal(true, firstLowSpeedPointerTick > 0 && firstLowSpeedPointerTick <= 100, "5% normalized pointer movement responds within 100 ms");
     }
 
     private static void VerifyConfigurationGuards(Assembly assembly) {
@@ -297,10 +350,20 @@ static class Program {
         configType.GetField("RightStickCurve").SetValue(config, "unknown");
         ExpectInvocationFailure(() => validate.Invoke(config, null), "unknown right-stick response curves are rejected");
 
+        config = Activator.CreateInstance(configType);
+        configType.GetField("RightStickLowSpeedAssist").SetValue(config, 1.1);
+        ExpectInvocationFailure(() => validate.Invoke(config, null), "right-stick low-speed assist remains a bounded curve adjustment");
+
+        config = Activator.CreateInstance(configType);
+        configType.GetField("ScrollReportIntervalMs").SetValue(config, 0);
+        ExpectInvocationFailure(() => validate.Invoke(config, null), "wheel report pacing must stay positive");
+
         Type integrator = RequiredType(assembly, "RightStickMouseIntegrator");
         MethodInfo curve = RequiredMethod(integrator, "ApplyResponseCurve");
-        Equal(0.0625, curve.Invoke(null, new object[] { 0.25, "power", 2.0 }), "power response curve uses the configured exponent");
-        Equal(0.25, curve.Invoke(null, new object[] { 0.25, "linear", 2.0 }), "linear response curve is implemented rather than a dead setting");
+        Equal(0.0625, curve.Invoke(null, new object[] { 0.25, "power", 2.0, 0.0 }), "power response curve uses the configured exponent");
+        Equal(0.06953125, curve.Invoke(null, new object[] { 0.25, "power", 2.0, 0.05 }), "low-speed assist adds a center-weighted power-curve component");
+        Equal(1.0, curve.Invoke(null, new object[] { 1.0, "power", 3.0, 0.05 }), "low-speed assist does not change full-stick speed");
+        Equal(0.25, curve.Invoke(null, new object[] { 0.25, "linear", 2.0, 0.05 }), "linear response curve remains unchanged by power-curve assistance");
     }
 
     private static void VerifyCapsFnStroke(MethodInfo resolve, object instance, Type strokeType, Type keyType, string inputKey, bool inputShift, string expectedKey, bool expectedShift, bool expectedTranslated) {
@@ -324,12 +387,12 @@ static class Program {
         (int Fingers, string Side, string Direction, string Shortcut, string Repeat)[] cases = {
             (1, "Right", "Left", "PreviousDesktop", "Timed"),
             (1, "Right", "Right", "NextDesktop", "Timed"),
-            (1, "Right", "Up", "PreviousWindow", "Timed"),
-            (1, "Right", "Down", "NextWindow", "Timed"),
+            (1, "Right", "Up", "MaximizeWindow", "None"),
+            (1, "Right", "Down", "RestoreOrMinimizeWindow", "None"),
             (1, "Left", "Right", "NextAltTabWindow", "Distance"),
             (1, "Left", "Left", "PreviousAltTabWindow", "Distance"),
-            (1, "Left", "Up", "MaximizeWindow", "None"),
-            (1, "Left", "Down", "RestoreOrMinimizeWindow", "None"),
+            (1, "Left", "Up", "PreviousWindow", "Timed"),
+            (1, "Left", "Down", "NextWindow", "Timed"),
             (2, "Left", "Up", "PreviousTab", "Timed"),
             (2, "Left", "Down", "NextTab", "Timed"),
             (2, "Left", "Left", "BackNavigation", "Timed"),

@@ -5,6 +5,7 @@ internal sealed class LeftStickScrollIntegrator {
     private const int MaxWheelDeltaPerFrame = 120;
 
     private double _accumulatedWheelDelta;
+    private double _secondsSinceLastReport;
     private double _smoothedNormalizedRadius;
     private int _lastDirection;
     private bool _hasActiveDirection;
@@ -12,6 +13,7 @@ internal sealed class LeftStickScrollIntegrator {
 
     public void Reset() {
         _accumulatedWheelDelta = 0.0;
+        _secondsSinceLastReport = 0.0;
         _smoothedNormalizedRadius = 0.0;
         _lastDirection = 0;
         _hasActiveDirection = false;
@@ -38,12 +40,16 @@ internal sealed class LeftStickScrollIntegrator {
             _hasActiveDirection = true;
             _lastDirection = direction;
             _accumulatedWheelDelta = 0.0;
+            _secondsSinceLastReport = Double.PositiveInfinity;
             _hasSmoothedRadius = false;
         }
 
         double smoothedNormalized = SmoothNormalizedRadius(normalized, deltaSec, config.MouseScrollSmoothingMs);
         _accumulatedWheelDelta += direction * WheelDeltaPerSecond(smoothedNormalized, config) * deltaSec;
+        _secondsSinceLastReport += deltaSec;
+        if (_secondsSinceLastReport * 1000.0 < Math.Max(1, config.ScrollReportIntervalMs)) return false;
         wheelDelta = TakeRoundedWheelDelta(ref _accumulatedWheelDelta);
+        if (wheelDelta != 0) _secondsSinceLastReport = 0.0;
         return wheelDelta != 0;
     }
 
