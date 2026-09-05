@@ -7,12 +7,12 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$root = $PSScriptRoot
+$root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root 'ShikiPad.csproj'
 $releaseDir = Join-Path $root 'release'
 $publishDir = Join-Path $root 'release\publish'
 $packageDir = Join-Path $root 'release\ShikiPad'
-$zipPath = Join-Path $releaseDir 'ShikiPad.zip'
+$zipPath = Join-Path $root 'ShikiPad.zip'
 $temporaryZip = Join-Path $releaseDir 'ShikiPad.tmp.zip'
 $rootExe = Join-Path $root 'ShikiPad.exe'
 $hashFile = Join-Path $root 'SHA256SUMS.txt'
@@ -64,16 +64,16 @@ if (!$AllowUnsigned -and $signature.Status -ne 'Valid') {
 }
 
 $packageFiles = @(
-    'install_driver.bat',
-    'interception.dll',
-    'README.md',
-    'RELEASE_NOTES.md',
-    'THIRD_PARTY_NOTICES.md',
-    'shiki.ico',
-    'ShikiPad.manifest'
+    @{ Source = 'install_driver.bat'; Destination = 'install_driver.bat' },
+    @{ Source = 'interception.dll'; Destination = 'interception.dll' },
+    @{ Source = 'README.md'; Destination = 'README.md' },
+    @{ Source = 'docs\RELEASE_NOTES.md'; Destination = 'RELEASE_NOTES.md' },
+    @{ Source = 'docs\THIRD_PARTY_NOTICES.md'; Destination = 'THIRD_PARTY_NOTICES.md' },
+    @{ Source = 'assets\shiki.ico'; Destination = 'shiki.ico' },
+    @{ Source = 'assets\ShikiPad.manifest'; Destination = 'ShikiPad.manifest' }
 )
-foreach ($relativePath in $packageFiles) {
-    Copy-Item -LiteralPath (Join-Path $root $relativePath) -Destination (Join-Path $packageDir $relativePath) -Force
+foreach ($packageFile in $packageFiles) {
+    Copy-Item -LiteralPath (Join-Path $root $packageFile.Source) -Destination (Join-Path $packageDir $packageFile.Destination) -Force
 }
 Copy-Item -LiteralPath $publishedExe -Destination (Join-Path $packageDir 'ShikiPad.exe') -Force
 @(

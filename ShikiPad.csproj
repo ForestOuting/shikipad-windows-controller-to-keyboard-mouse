@@ -7,8 +7,8 @@
     <ImplicitUsings>false</ImplicitUsings>
     <Nullable>disable</Nullable>
     <AssemblyName>ShikiPad</AssemblyName>
-    <ApplicationManifest>ShikiPad.manifest</ApplicationManifest>
-    <ApplicationIcon>shiki.ico</ApplicationIcon>
+    <ApplicationManifest>assets\ShikiPad.manifest</ApplicationManifest>
+    <ApplicationIcon>assets\shiki.ico</ApplicationIcon>
     <PlatformTarget>x64</PlatformTarget>
     <Version>5.2.0</Version>
     <AssemblyVersion>5.2.0.0</AssemblyVersion>

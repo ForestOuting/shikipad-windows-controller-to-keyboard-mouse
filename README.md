@@ -10,6 +10,19 @@ ShikiPad 是面向有线 PS5 DualSense 的 Windows 原生手柄键鼠映射工�
 - 鼠标和滚轮积分分别位于 `src/RightStickMouseIntegrator.cs`、`src/LeftStickScrollIntegrator.cs`。
 - `Enabled = true` 是启动时默认启用状态；Interception 输出固定使用扫描码，不再提供无效的虚拟键码开关。
 
+## 仓库结构
+
+| 目录或文件 | 用途 |
+|---|---|
+| `src/` | 程序源码 |
+| `tests/` | 逻辑测试 |
+| `assets/` | 图标与程序清单等构建资源 |
+| `driver/` | Interception 驱动安装程序 |
+| `docs/` | 发布记录与第三方许可说明 |
+| `scripts/` | 开发和正式发布脚本 |
+| `ShikiPad.exe`、`interception.dll`、`install_driver.bat` | 根目录可直接使用的程序与安装文件 |
+| `ShikiPad.zip` | 本地发布产物；位于根目录但被 Git 忽略 |
+
 ## 支持范围
 
 请使用官方 DualSense 手柄并通过 USB 连接。当前版本不支持蓝牙、Xbox、DualShock 4 或其他手柄模式。完整触控板报告、触点 ID、静音键等功能也依赖 DualSense USB HID 报告。
@@ -68,7 +81,7 @@ ShikiPad 必须通过 Interception 输出键盘和鼠标，不会回退到 `Send
 
 ## 发布包
 
-发布压缩包不保存在仓库根目录，只在 [GitHub Releases](https://github.com/ForestOuting/ShikiPad/releases) 中作为正式版本附件提供。压缩包包含：
+正式打包后，发布压缩包会生成在本地仓库根目录的 `ShikiPad.zip`。该文件已被 Git 忽略，不会提交到仓库；正式发布时将它作为 [GitHub Releases](https://github.com/ForestOuting/ShikiPad/releases) 附件上传。压缩包包含：
 
 | 文件 | 用途 |
 |---|---|
@@ -83,7 +96,7 @@ ShikiPad 必须通过 Interception 输出键盘和鼠标，不会回退到 `Send
 | `BUILD_INFO.txt` | 发布版本、源码提交与工作树状态 |
 | `shiki.ico` / `ShikiPad.manifest` | 图标和程序清单 |
 
-正式打包使用 `powershell -NoProfile -ExecutionPolicy Bypass -File .\publish_release.ps1`。脚本会要求 Git 工作树干净、记录源码提交、重新发布当前工作树、校验 V5.2 文件版本、重建文件清单，并在被 Git 忽略的 `release\ShikiPad.zip` 生成待上传附件；该 ZIP 只用于 GitHub Release，不应加入 Git 提交。脚本默认拒绝没有有效 Authenticode 签名的主程序；只有制作内部测试包时才应在命令末尾显式传入 `-AllowDirty -AllowUnsigned`。`shikipad.default` 已删除，不属于程序输入，也不会进入新发布包。
+正式打包使用 `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\publish_release.ps1`。脚本会要求 Git 工作树干净、记录源码提交、重新发布当前工作树、校验 V5.2 文件版本、重建文件清单，并在根目录生成被 Git 忽略的 `ShikiPad.zip`；该 ZIP 只用于 GitHub Release，不应加入 Git 提交。脚本默认拒绝没有有效 Authenticode 签名的主程序；只有制作内部测试包时才应在命令末尾显式传入 `-AllowDirty -AllowUnsigned`。`shikipad.default` 已删除，不属于程序输入，也不会进入新发布包。
 
 ## 开机自启动
 
