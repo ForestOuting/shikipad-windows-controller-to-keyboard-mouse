@@ -9,10 +9,11 @@ Set-StrictMode -Version Latest
 
 $root = $PSScriptRoot
 $project = Join-Path $root 'ShikiPad.csproj'
+$releaseDir = Join-Path $root 'release'
 $publishDir = Join-Path $root 'release\publish'
 $packageDir = Join-Path $root 'release\ShikiPad'
-$zipPath = Join-Path $root 'ShikiPad.zip'
-$temporaryZip = Join-Path $root 'release\ShikiPad.zip'
+$zipPath = Join-Path $releaseDir 'ShikiPad.zip'
+$temporaryZip = Join-Path $releaseDir 'ShikiPad.tmp.zip'
 $rootExe = Join-Path $root 'ShikiPad.exe'
 $hashFile = Join-Path $root 'SHA256SUMS.txt'
 
@@ -126,3 +127,4 @@ Move-Item -LiteralPath $temporaryZip -Destination $zipPath -Force
 $zipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
 Write-Host "ShikiPad V5.2 package created: $zipPath"
 Write-Host "ZIP SHA256: $zipHash"
+Write-Host "Upload this ZIP as a GitHub Release asset; do not commit it to the repository."

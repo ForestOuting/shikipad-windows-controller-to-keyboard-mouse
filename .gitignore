@@ -9,6 +9,7 @@ bin/
 *.sln.docstates
 *.log
 release/
+/ShikiPad.zip
 ShikiPad-release-*.zip
 ShikiPad_old.exe
 ShikiPad_test.exe

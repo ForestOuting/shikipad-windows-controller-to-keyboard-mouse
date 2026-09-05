@@ -68,7 +68,7 @@ ShikiPad 必须通过 Interception 输出键盘和鼠标，不会回退到 `Send
 
 ## 发布包
 
-根目录 `ShikiPad.zip` 是实际发布包，包含：
+发布压缩包不保存在仓库根目录，只在 [GitHub Releases](https://github.com/ForestOuting/ShikiPad/releases) 中作为正式版本附件提供。压缩包包含：
 
 | 文件 | 用途 |
 |---|---|
@@ -83,7 +83,7 @@ ShikiPad 必须通过 Interception 输出键盘和鼠标，不会回退到 `Send
 | `BUILD_INFO.txt` | 发布版本、源码提交与工作树状态 |
 | `shiki.ico` / `ShikiPad.manifest` | 图标和程序清单 |
 
-正式打包使用 `powershell -NoProfile -ExecutionPolicy Bypass -File .\publish_release.ps1`。脚本会要求 Git 工作树干净、记录源码提交、重新发布当前工作树、校验 V5.2 文件版本、重建文件清单和 ZIP，并默认拒绝没有有效 Authenticode 签名的主程序；只有制作内部测试包时才应在命令末尾显式传入 `-AllowDirty -AllowUnsigned`。`shikipad.default` 已删除，不属于程序输入，也不会进入新发布包。
+正式打包使用 `powershell -NoProfile -ExecutionPolicy Bypass -File .\publish_release.ps1`。脚本会要求 Git 工作树干净、记录源码提交、重新发布当前工作树、校验 V5.2 文件版本、重建文件清单，并在被 Git 忽略的 `release\ShikiPad.zip` 生成待上传附件；该 ZIP 只用于 GitHub Release，不应加入 Git 提交。脚本默认拒绝没有有效 Authenticode 签名的主程序；只有制作内部测试包时才应在命令末尾显式传入 `-AllowDirty -AllowUnsigned`。`shikipad.default` 已删除，不属于程序输入，也不会进入新发布包。
 
 ## 开机自启动
 

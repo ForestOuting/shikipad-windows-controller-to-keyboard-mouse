@@ -14,6 +14,7 @@
 - Kept the documented module call order without a runtime priority/stage gate, added native Interception send-result checks with one retry, serialized context cleanup, and kept injector bookkeeping unchanged after failed sends.
 - Added a per-session single-instance lock, HID parse diagnostics, validated editable parameters, implemented the documented linear right-stick curve, and corrected all assembly metadata to V5.2.
 - Added reproducible release packaging, SHA-256 manifests, third-party notices, .NET 8 Desktop Runtime documentation, and driver-installer exit-code handling; removed the unused Bluetooth marker from the package definition.
+- Stopped tracking the release ZIP in the repository root; the packaging script now creates an ignored `release\ShikiPad.zip` solely for upload as a GitHub Release asset.
 - Left-stick and Create/Options modifier states and 45 ms bindings are registered immediately, while physical KeyDown output follows touchpad output and precedes bindable mouse/action output in the same poll.
 - KeyUp, mouse-up, gesture-modifier cleanup, Home/Mute state, and shoulder/trigger layer state remain independent and cannot be suppressed by another module's output.
 - Mouse-button and action pending states continue to implement their intentional 45 ms decision windows; once due, they are no longer postponed merely because another module emitted in the same poll.
