@@ -1317,10 +1317,10 @@ internal sealed class MapperForm : Form {
                         shortcut = TouchGestureShortcut.CloseWindow;
                         return true;
                     case TouchGestureDirection.Left:
-                        shortcut = TouchGestureShortcut.SnapWindowLeft;
+                        shortcut = TouchGestureShortcut.MoveWindowToLeftMonitor;
                         return true;
                     case TouchGestureDirection.Right:
-                        shortcut = TouchGestureShortcut.SnapWindowRight;
+                        shortcut = TouchGestureShortcut.MoveWindowToRightMonitor;
                         return true;
                 }
             }
@@ -1375,13 +1375,13 @@ internal sealed class MapperForm : Form {
                 ReleaseTouchGestureModifiers();
                 _injector.KeyTapExact(PhysicalKey.ArrowRight, false, true, false, true);
                 break;
-            case TouchGestureShortcut.SnapWindowLeft:
+            case TouchGestureShortcut.MoveWindowToLeftMonitor:
                 ReleaseTouchGestureModifiers();
-                _injector.KeyTapExact(PhysicalKey.ArrowLeft, false, false, false, true);
+                _injector.KeyTapExact(PhysicalKey.ArrowLeft, true, false, false, true);
                 break;
-            case TouchGestureShortcut.SnapWindowRight:
+            case TouchGestureShortcut.MoveWindowToRightMonitor:
                 ReleaseTouchGestureModifiers();
-                _injector.KeyTapExact(PhysicalKey.ArrowRight, false, false, false, true);
+                _injector.KeyTapExact(PhysicalKey.ArrowRight, true, false, false, true);
                 break;
             case TouchGestureShortcut.Screenshot:
                 ReleaseTouchGestureModifiers();
@@ -2561,8 +2561,8 @@ internal sealed class MapperForm : Form {
         NextAltTabWindow,
         PreviousDesktop,
         NextDesktop,
-        SnapWindowLeft,
-        SnapWindowRight,
+        MoveWindowToLeftMonitor,
+        MoveWindowToRightMonitor,
         Screenshot,
         RestoreMinimizedWindows,
         CloseWindow,

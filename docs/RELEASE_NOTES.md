@@ -18,7 +18,7 @@
 - Left-stick and Create/Options modifier states and 45 ms bindings are registered immediately, while physical KeyDown output follows touchpad output and precedes bindable mouse/action output in the same poll.
 - KeyUp, mouse-up, gesture-modifier cleanup, Home/Mute state, and shoulder/trigger layer state remain independent and cannot be suppressed by another module's output.
 - Mouse-button and action pending states continue to implement their intentional 45 ms decision windows; once due, they are no longer postponed merely because another module emitted in the same poll.
-- Reassigned right-side touch gestures: one-finger up/down restores minimized windows or minimizes all windows; two-finger up/down takes a screenshot or closes the current window; two-finger left/right snaps the current window to either side of the display.
+- Reassigned right-side touch gestures: one-finger up/down restores minimized windows or minimizes all windows; two-finger up/down takes a screenshot or closes the current window; two-finger left/right uses `Win+Shift+Left/Right` to move the current window to the left/right monitor.
 - Raised the default mouse sensitivity from 1.0 to 1.5, reduced the combo-layer recognition window from 35 ms to 25 ms, and shortened the action-layer grace window from 45 ms to 35 ms to reduce late layer takeover while typing quickly.
 - `KeyTap` now temporarily releases and restores an already-held ordinary target key, preventing an atomic shortcut from stealing another module's held-key ownership.
 - Touch-gesture shortcuts now use exact modifier isolation: unrelated held modifiers are suspended for the atomic shortcut and restored afterward, while action-layer taps retain their intentional 45 ms bound modifiers.

@@ -405,8 +405,8 @@ static class Program {
             (2, "Left", "Down", "NextTab", "Timed"),
             (2, "Left", "Left", "BackNavigation", "Timed"),
             (2, "Left", "Right", "ForwardNavigation", "Timed"),
-            (2, "Right", "Right", "SnapWindowRight", "None"),
-            (2, "Right", "Left", "SnapWindowLeft", "None"),
+            (2, "Right", "Right", "MoveWindowToRightMonitor", "None"),
+            (2, "Right", "Left", "MoveWindowToLeftMonitor", "None"),
             (2, "Right", "Up", "Screenshot", "None"),
             (2, "Right", "Down", "CloseWindow", "None")
         };
