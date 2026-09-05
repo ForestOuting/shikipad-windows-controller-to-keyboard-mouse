@@ -125,6 +125,14 @@ Copy-Item -LiteralPath (Join-Path $packageDir 'SHA256SUMS.txt') -Destination $ha
 Move-Item -LiteralPath $temporaryZip -Destination $zipPath -Force
 
 $zipHash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+foreach ($path in @($publishDir, $packageDir)) {
+    if (Test-Path -LiteralPath $path) {
+        Remove-Item -LiteralPath $path -Recurse -Force
+    }
+}
+if ((Test-Path -LiteralPath $releaseDir) -and @(Get-ChildItem -LiteralPath $releaseDir -Force).Count -eq 0) {
+    Remove-Item -LiteralPath $releaseDir -Force
+}
 Write-Host "ShikiPad V5.2 package created: $zipPath"
 Write-Host "ZIP SHA256: $zipHash"
 Write-Host "Upload this ZIP as a GitHub Release asset; do not commit it to the repository."
