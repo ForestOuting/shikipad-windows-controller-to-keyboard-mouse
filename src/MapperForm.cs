@@ -1285,10 +1285,10 @@ internal sealed class MapperForm : Form {
                         shortcut = TouchGestureShortcut.NextDesktop;
                         return true;
                     case TouchGestureDirection.Up:
-                        shortcut = TouchGestureShortcut.MaximizeWindow;
+                        shortcut = TouchGestureShortcut.RestoreMinimizedWindows;
                         return true;
                     case TouchGestureDirection.Down:
-                        shortcut = TouchGestureShortcut.RestoreOrMinimizeWindow;
+                        shortcut = TouchGestureShortcut.MinimizeAllWindows;
                         return true;
                 }
             }
@@ -1311,16 +1311,16 @@ internal sealed class MapperForm : Form {
             } else if (side == TouchGestureSide.Right) {
                 switch (direction) {
                     case TouchGestureDirection.Up:
-                        shortcut = TouchGestureShortcut.RestoreMinimizedWindows;
-                        return true;
-                    case TouchGestureDirection.Down:
-                        shortcut = TouchGestureShortcut.MinimizeAllWindows;
-                        return true;
-                    case TouchGestureDirection.Left:
                         shortcut = TouchGestureShortcut.Screenshot;
                         return true;
-                    case TouchGestureDirection.Right:
+                    case TouchGestureDirection.Down:
                         shortcut = TouchGestureShortcut.CloseWindow;
+                        return true;
+                    case TouchGestureDirection.Left:
+                        shortcut = TouchGestureShortcut.SnapWindowLeft;
+                        return true;
+                    case TouchGestureDirection.Right:
+                        shortcut = TouchGestureShortcut.SnapWindowRight;
                         return true;
                 }
             }
@@ -1375,13 +1375,13 @@ internal sealed class MapperForm : Form {
                 ReleaseTouchGestureModifiers();
                 _injector.KeyTapExact(PhysicalKey.ArrowRight, false, true, false, true);
                 break;
-            case TouchGestureShortcut.MaximizeWindow:
+            case TouchGestureShortcut.SnapWindowLeft:
                 ReleaseTouchGestureModifiers();
-                _injector.KeyTapExact(PhysicalKey.ArrowUp, false, false, false, true);
+                _injector.KeyTapExact(PhysicalKey.ArrowLeft, false, false, false, true);
                 break;
-            case TouchGestureShortcut.RestoreOrMinimizeWindow:
+            case TouchGestureShortcut.SnapWindowRight:
                 ReleaseTouchGestureModifiers();
-                _injector.KeyTapExact(PhysicalKey.ArrowDown, false, false, false, true);
+                _injector.KeyTapExact(PhysicalKey.ArrowRight, false, false, false, true);
                 break;
             case TouchGestureShortcut.Screenshot:
                 ReleaseTouchGestureModifiers();
@@ -2561,8 +2561,8 @@ internal sealed class MapperForm : Form {
         NextAltTabWindow,
         PreviousDesktop,
         NextDesktop,
-        MaximizeWindow,
-        RestoreOrMinimizeWindow,
+        SnapWindowLeft,
+        SnapWindowRight,
         Screenshot,
         RestoreMinimizedWindows,
         CloseWindow,

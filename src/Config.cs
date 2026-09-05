@@ -2,7 +2,7 @@ using System;
 
 internal sealed class Config {
     public bool Enabled = true;
-    public double MouseSensitivity = 1.0;
+    public double MouseSensitivity = 1.5;
     public double MouseMaxSpeed = 20.0;
     public double RightStickDeadzone = 0.015;
     public string RightStickCurve = "power";
@@ -19,12 +19,12 @@ internal sealed class Config {
     public int RepeatIntervalMs = 12;
     public int BaseRepeatSlowIntervalMs = 120;
     public int BaseRepeatRampMs = 1500;
-    public int ActionLayerGraceMs = 45;
+    public int ActionLayerGraceMs = 35;
     public int ModifierBindingWindowMs = 45;
     public int ActionLayerPostGraceMs = 15;
     public int LayerTakeoverWindowMs = 30;
     public int LayerOccupancyCarryCutoffMs = 20;
-    public int ComboLayerWindowMs = 35;
+    public int ComboLayerWindowMs = 25;
     public int ScrollSlowIntervalMs = 1500;
     public int ScrollFastIntervalMs = 15;
     public int ScrollReportIntervalMs = 4;
